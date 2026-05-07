@@ -1,0 +1,40 @@
+# Unity generated folders
+/Library/
+/Temp/
+/Logs/
+/Obj/
+/Build/
+/Builds/
+/UserSettings/
+/MemoryCaptures/
+
+# Unity generated files
+*.csproj
+*.sln
+*.slnx
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+._*
+.vs/
+.vscode/
+.idea/
+.claude/
+
+# Room2Scan local/generated runtime assets
+/replica/
+/Generated/
+/Export/
+/Exports/
+*.apk
+*.aab
+*.unitypackage

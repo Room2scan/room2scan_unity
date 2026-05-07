@@ -1,0 +1,688 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://room2scan.dev/schemas/room-json-v1.schema.json",
+  "title": "Room JSON v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "roomId",
+    "source",
+    "coordinateSystem",
+    "mesh",
+    "bounds",
+    "placement"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "room-json/v1"
+    },
+    "roomId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "datasetName",
+        "datasetVersion",
+        "sceneId"
+      ],
+      "properties": {
+        "datasetName": {
+          "type": "string",
+          "const": "replica"
+        },
+        "datasetVersion": {
+          "type": "string",
+          "const": "v1"
+        },
+        "sceneId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "originalSceneDir": {
+              "type": "string",
+              "minLength": 1
+            },
+            "originalFiles": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "meshPly": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "semanticJson": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "semanticBin": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "presegJson": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "presegBin": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "habitatInfoSemanticJson": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "habitatStageConfigJson": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "cameraParamsJson": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "trajectoryTxt": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "conversion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tool": {
+              "type": "string",
+              "minLength": 1
+            },
+            "toolVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "convertedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "sourceCoordinateSystem": {
+              "$ref": "#/$defs/sourceCoordinateSystem"
+            },
+            "axisRemapToRoom": {
+              "$ref": "#/$defs/axisRemap"
+            },
+            "roomOriginPolicy": {
+              "type": "string",
+              "enum": [
+                "source_origin",
+                "floor_zero",
+                "bounds_center_floor_zero",
+                "manual"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "handedness",
+        "upAxis",
+        "forwardAxis",
+        "toUnity"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "const": "meter"
+        },
+        "handedness": {
+          "type": "string",
+          "const": "left"
+        },
+        "upAxis": {
+          "type": "string",
+          "const": "+Y"
+        },
+        "forwardAxis": {
+          "type": "string",
+          "const": "+Z"
+        },
+        "toUnity": {
+          "type": "object",
+          "description": "Room JSON v1 is already normalized to Unity room-local coordinates, so this transform must stay identity.",
+          "additionalProperties": false,
+          "required": [
+            "positionOffset",
+            "rotationEulerDeg",
+            "scaleMultiplier"
+          ],
+          "properties": {
+            "positionOffset": {
+              "$ref": "#/$defs/zeroVector3"
+            },
+            "rotationEulerDeg": {
+              "$ref": "#/$defs/zeroVector3"
+            },
+            "scaleMultiplier": {
+              "type": "number",
+              "const": 1
+            }
+          }
+        }
+      }
+    },
+    "mesh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri",
+        "format"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "type": "string",
+          "const": "glb"
+        },
+        "checksum": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "algorithm",
+            "value"
+          ],
+          "properties": {
+            "algorithm": {
+              "type": "string",
+              "enum": [
+                "sha256",
+                "md5"
+              ]
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "aabbLocal": {
+          "$ref": "#/$defs/aabb"
+        },
+        "geometryStats": {
+          "$ref": "#/$defs/geometryStats"
+        }
+      }
+    },
+    "bounds": {
+      "$ref": "#/$defs/aabb"
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "floorPolygons"
+      ],
+      "properties": {
+        "floorPolygons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/floorPolygon"
+          }
+        },
+        "walls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/wall"
+          }
+        },
+        "blockedZones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/polygon2D"
+          }
+        },
+        "derivation": {
+          "$ref": "#/$defs/placementDerivation"
+        }
+      }
+    },
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/semanticInstance"
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/semanticLabel"
+          }
+        }
+      }
+    },
+    "initialLayout": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/furniturePlacement"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "axis": {
+      "type": "string",
+      "enum": [
+        "+X",
+        "-X",
+        "+Y",
+        "-Y",
+        "+Z",
+        "-Z"
+      ]
+    },
+    "sourceCoordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "upAxis"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "const": "meter"
+        },
+        "handedness": {
+          "type": "string",
+          "enum": [
+            "right",
+            "left",
+            "unknown"
+          ]
+        },
+        "upAxis": {
+          "$ref": "#/$defs/axis"
+        },
+        "forwardAxis": {
+          "$ref": "#/$defs/axis"
+        }
+      }
+    },
+    "axisRemap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/axis"
+        },
+        "y": {
+          "$ref": "#/$defs/axis"
+        },
+        "z": {
+          "$ref": "#/$defs/axis"
+        }
+      }
+    },
+    "vector2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      }
+    },
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      }
+    },
+    "zeroVector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "const": 0
+        },
+        "y": {
+          "type": "number",
+          "const": 0
+        },
+        "z": {
+          "type": "number",
+          "const": 0
+        }
+      }
+    },
+    "aabb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ],
+      "properties": {
+        "min": {
+          "$ref": "#/$defs/vector3"
+        },
+        "max": {
+          "$ref": "#/$defs/vector3"
+        }
+      }
+    },
+    "geometryStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vertexCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "faceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasNormals": {
+          "type": "boolean"
+        },
+        "hasVertexColors": {
+          "type": "boolean"
+        },
+        "sourceFormat": {
+          "type": "string",
+          "enum": [
+            "ply",
+            "glb",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "placementDerivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "aabb",
+            "semantic_floor",
+            "mesh_floor_projection",
+            "ai_estimated"
+          ]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "polygon2D": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "points"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/vector2"
+          }
+        }
+      }
+    },
+    "floorPolygon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "points"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/vector2"
+          }
+        },
+        "elevationY": {
+          "type": "number"
+        }
+      }
+    },
+    "opening": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "offset",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "door",
+            "window",
+            "archway",
+            "pass-through"
+          ]
+        },
+        "offset": {
+          "type": "number",
+          "minimum": 0
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sillHeight": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "wall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "start",
+        "end",
+        "height"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start": {
+          "$ref": "#/$defs/vector2"
+        },
+        "end": {
+          "$ref": "#/$defs/vector2"
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "thickness": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "openings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/opening"
+          }
+        }
+      }
+    },
+    "semanticLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "labelId",
+        "name"
+      ],
+      "properties": {
+        "labelId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "semanticInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instanceId",
+        "labelId"
+      ],
+      "properties": {
+        "instanceId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "labelId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "furniturePlacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instanceId",
+        "catalogId",
+        "position",
+        "rotationYDeg"
+      ],
+      "properties": {
+        "instanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "catalogId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "$ref": "#/$defs/vector3"
+        },
+        "rotationYDeg": {
+          "type": "number"
+        },
+        "scale": {
+          "$ref": "#/$defs/vector3"
+        },
+        "isLocked": {
+          "type": "boolean"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

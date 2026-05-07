@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "layout-json/v1",
+  "layoutId": "layout_20260506_0001",
+  "roomId": "replica_room_0_living_001",
+  "roomSchemaVersion": "room-json/v1",
+  "editorSessionId": "unity_session_7f0d6a1a",
+  "savedAt": "2026-05-06T12:45:00Z",
+  "coordinateSystem": {
+    "unit": "meter",
+    "handedness": "left",
+    "upAxis": "+Y",
+    "forwardAxis": "+Z"
+  },
+  "items": [
+    {
+      "instanceId": "furn_0001",
+      "catalogId": "bed_queen_01",
+      "displayName": "Queen Bed",
+      "transform": {
+        "position": {
+          "x": -1.4,
+          "y": 0.0,
+          "z": 0.9
+        },
+        "rotationYDeg": 90.0,
+        "scale": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 1.0
+        }
+      },
+      "isLocked": false,
+      "validation": {
+        "isValid": true,
+        "reasons": []
+      },
+      "metadata": {
+        "source": "user"
+      }
+    },
+    {
+      "instanceId": "furn_0002",
+      "catalogId": "desk_basic_01",
+      "displayName": "Desk",
+      "transform": {
+        "position": {
+          "x": 2.3,
+          "y": 0.0,
+          "z": 2.8
+        },
+        "rotationYDeg": 0.0,
+        "scale": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 1.0
+        }
+      },
+      "isLocked": false,
+      "validation": {
+        "isValid": false,
+        "reasons": [
+          {
+            "code": "hit_wall",
+            "targetId": "wall_north",
+            "message": "Desk overlaps the north wall."
+          }
+        ]
+      },
+      "metadata": {
+        "source": "user"
+      }
+    }
+  ],
+  "validation": {
+    "isValid": false,
+    "invalidItemIds": [
+      "furn_0002"
+    ],
+    "warnings": [
+      {
+        "code": "near_window",
+        "targetId": "window_n_0",
+        "message": "Bed is close to a window."
+      }
+    ]
+  },
+  "camera": {
+    "target": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.6
+    },
+    "yawDeg": 45.0,
+    "pitchDeg": 55.0,
+    "distance": 5.5
+  },
+  "extensions": {}
+}

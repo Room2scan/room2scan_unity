@@ -1,0 +1,407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://room2scan.dev/schemas/furniture-catalog-json-v1.schema.json",
+  "title": "Furniture Catalog JSON v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "catalogId",
+    "updatedAt",
+    "coordinateSystem",
+    "items"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "furniture-catalog-json/v1"
+    },
+    "catalogId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "catalogVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "coordinateSystem": {
+      "$ref": "#/$defs/fixedUnityCoordinateSystem"
+    },
+    "assetsBaseUri": {
+      "type": "string",
+      "minLength": 1
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/catalogItem"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "fixedUnityCoordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "handedness",
+        "upAxis",
+        "forwardAxis"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "const": "meter"
+        },
+        "handedness": {
+          "type": "string",
+          "const": "left"
+        },
+        "upAxis": {
+          "type": "string",
+          "const": "+Y"
+        },
+        "forwardAxis": {
+          "type": "string",
+          "const": "+Z"
+        }
+      }
+    },
+    "vector2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      }
+    },
+    "positiveVector2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "z": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      }
+    },
+    "positiveVector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "y": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "z": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceType",
+        "format",
+        "uri"
+      ],
+      "properties": {
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "unity_resources",
+            "unity_addressable",
+            "local_glb",
+            "remote_glb"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "unity_prefab",
+            "glb"
+          ]
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bundleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checksum": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "algorithm",
+            "value"
+          ],
+          "properties": {
+            "algorithm": {
+              "type": "string",
+              "enum": [
+                "sha256",
+                "md5"
+              ]
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "pivot"
+      ],
+      "properties": {
+        "size": {
+          "$ref": "#/$defs/positiveVector3"
+        },
+        "pivot": {
+          "type": "string",
+          "enum": [
+            "center_bottom",
+            "center",
+            "model_origin"
+          ]
+        }
+      }
+    },
+    "footprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "center",
+        "size"
+      ],
+      "properties": {
+        "shape": {
+          "type": "string",
+          "const": "box"
+        },
+        "center": {
+          "$ref": "#/$defs/vector2"
+        },
+        "size": {
+          "$ref": "#/$defs/positiveVector2"
+        }
+      }
+    },
+    "collisionProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "center",
+        "size"
+      ],
+      "properties": {
+        "shape": {
+          "type": "string",
+          "const": "box"
+        },
+        "center": {
+          "$ref": "#/$defs/vector3"
+        },
+        "size": {
+          "$ref": "#/$defs/positiveVector3"
+        }
+      }
+    },
+    "placementRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedSurfaces",
+        "rotationStepDeg",
+        "clearanceMeters"
+      ],
+      "properties": {
+        "allowedSurfaces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "floor"
+            ]
+          }
+        },
+        "rotationStepDeg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 360
+        },
+        "clearanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "canRotate": {
+          "type": "boolean"
+        },
+        "canDelete": {
+          "type": "boolean"
+        },
+        "snapToWall": {
+          "type": "boolean"
+        }
+      }
+    },
+    "defaultTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rotationYDeg",
+        "scale"
+      ],
+      "properties": {
+        "rotationYDeg": {
+          "type": "number"
+        },
+        "scale": {
+          "$ref": "#/$defs/vector3"
+        },
+        "spawnOffset": {
+          "$ref": "#/$defs/vector3"
+        }
+      }
+    },
+    "catalogItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalogId",
+        "displayName",
+        "category",
+        "asset",
+        "dimensions",
+        "footprint",
+        "collisionProxy",
+        "placementRules",
+        "defaultTransform"
+      ],
+      "properties": {
+        "catalogId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "bed",
+            "desk",
+            "chair",
+            "cabinet",
+            "sofa",
+            "table",
+            "shelf",
+            "decor",
+            "appliance",
+            "custom"
+          ]
+        },
+        "asset": {
+          "$ref": "#/$defs/asset"
+        },
+        "thumbnailUri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dimensions": {
+          "$ref": "#/$defs/dimensions"
+        },
+        "footprint": {
+          "$ref": "#/$defs/footprint"
+        },
+        "collisionProxy": {
+          "$ref": "#/$defs/collisionProxy"
+        },
+        "placementRules": {
+          "$ref": "#/$defs/placementRules"
+        },
+        "defaultTransform": {
+          "$ref": "#/$defs/defaultTransform"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

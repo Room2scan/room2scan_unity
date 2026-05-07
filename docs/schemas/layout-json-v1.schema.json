@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://room2scan.dev/schemas/layout-json-v1.schema.json",
+  "title": "Layout JSON v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "roomId",
+    "savedAt",
+    "coordinateSystem",
+    "items",
+    "validation"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "layout-json/v1"
+    },
+    "layoutId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "roomId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "roomSchemaVersion": {
+      "type": "string",
+      "const": "room-json/v1"
+    },
+    "editorSessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "savedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "coordinateSystem": {
+      "$ref": "#/$defs/fixedUnityCoordinateSystem"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/layoutItem"
+      }
+    },
+    "validation": {
+      "$ref": "#/$defs/layoutValidation"
+    },
+    "camera": {
+      "$ref": "#/$defs/editorCamera"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "fixedUnityCoordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "handedness",
+        "upAxis",
+        "forwardAxis"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "const": "meter"
+        },
+        "handedness": {
+          "type": "string",
+          "const": "left"
+        },
+        "upAxis": {
+          "type": "string",
+          "const": "+Y"
+        },
+        "forwardAxis": {
+          "type": "string",
+          "const": "+Z"
+        }
+      }
+    },
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position",
+        "rotationYDeg",
+        "scale"
+      ],
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/vector3"
+        },
+        "rotationYDeg": {
+          "type": "number"
+        },
+        "scale": {
+          "$ref": "#/$defs/vector3"
+        }
+      }
+    },
+    "layoutItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instanceId",
+        "catalogId",
+        "transform",
+        "validation"
+      ],
+      "properties": {
+        "instanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "catalogId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "transform": {
+          "$ref": "#/$defs/transform"
+        },
+        "isLocked": {
+          "type": "boolean"
+        },
+        "validation": {
+          "$ref": "#/$defs/itemValidation"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "layoutValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "isValid",
+        "invalidItemIds"
+      ],
+      "properties": {
+        "isValid": {
+          "type": "boolean"
+        },
+        "invalidItemIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/validationWarning"
+          }
+        }
+      }
+    },
+    "itemValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "isValid",
+        "reasons"
+      ],
+      "properties": {
+        "isValid": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/validationReason"
+          }
+        }
+      }
+    },
+    "validationReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "out_of_room",
+            "hit_wall",
+            "hit_furniture",
+            "hit_blocked_zone",
+            "unknown"
+          ]
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "validationWarning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "near_wall",
+            "near_door",
+            "near_window",
+            "low_confidence_room_boundary",
+            "unknown"
+          ]
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "editorCamera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "yawDeg",
+        "pitchDeg",
+        "distance"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/vector3"
+        },
+        "yawDeg": {
+          "type": "number"
+        },
+        "pitchDeg": {
+          "type": "number"
+        },
+        "distance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  }
+}

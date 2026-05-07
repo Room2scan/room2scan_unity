@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "unity-bridge/v1",
+  "messageId": "unity_msg_0008",
+  "requestId": "req_save_layout_0001",
+  "kind": "event",
+  "direction": "unity_to_rn",
+  "name": "LayoutSaved",
+  "sentAt": "2026-05-06T13:30:00Z",
+  "payload": {
+    "layout": {
+      "schemaVersion": "layout-json/v1",
+      "layoutId": "layout_20260506_0001",
+      "roomId": "replica_room0",
+      "roomSchemaVersion": "room-json/v1",
+      "editorSessionId": "unity_session_7f0d6a1a",
+      "savedAt": "2026-05-06T13:30:00Z",
+      "coordinateSystem": {
+        "unit": "meter",
+        "handedness": "left",
+        "upAxis": "+Y",
+        "forwardAxis": "+Z"
+      },
+      "items": [
+        {
+          "instanceId": "furn_0001",
+          "catalogId": "bed_queen_01",
+          "displayName": "Queen Bed",
+          "transform": {
+            "position": {
+              "x": 1.2,
+              "y": 0.0,
+              "z": 0.8
+            },
+            "rotationYDeg": 90.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0,
+              "z": 1.0
+            }
+          },
+          "isLocked": false,
+          "validation": {
+            "isValid": true,
+            "reasons": []
+          },
+          "metadata": {
+            "source": "user"
+          }
+        }
+      ],
+      "validation": {
+        "isValid": true,
+        "invalidItemIds": [],
+        "warnings": []
+      },
+      "extensions": {}
+    }
+  }
+}
