@@ -383,6 +383,7 @@ namespace Room2Scan.Rooms
                 try
                 {
                     var meshCollider = meshFilter.gameObject.AddComponent<MeshCollider>();
+                    meshCollider.sharedMesh = null; // auto-assign 방지
                     if (CountTriangles(meshFilter.sharedMesh) > 1_500_000)
                     {
                         meshCollider.cookingOptions &= ~MeshColliderCookingOptions.UseFastMidphase;

@@ -2,7 +2,8 @@
     "name": "Room2Scan.Runtime",
     "rootNamespace": "Room2Scan",
     "references": [
-        "glTFast"
+        "glTFast",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

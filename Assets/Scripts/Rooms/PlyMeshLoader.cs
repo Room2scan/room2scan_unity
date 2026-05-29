@@ -393,13 +393,16 @@ namespace Room2Scan.Rooms
 
         private static Material CreateDefaultMaterial()
         {
-            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            var material = new Material(shader)
+            // Room2Scan/VertexColor 셰이더로 PLY vertex color를 그대로 표시
+            var shader = Shader.Find("Room2Scan/VertexColor");
+            if (shader == null)
             {
-                name = "Room2Scan_PLY_Test_Material"
-            };
-            material.color = new Color(0.78f, 0.78f, 0.72f, 1f);
-            return material;
+                // 폴백: URP/Lit (vertex color 없이 단색)
+                shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                Debug.LogWarning("Room2Scan PLY: Room2Scan/VertexColor shader not found, falling back to Lit (no vertex color).");
+            }
+
+            return new Material(shader) { name = "Room2Scan_PLY_Material" };
         }
 
         private sealed class PlyHeader

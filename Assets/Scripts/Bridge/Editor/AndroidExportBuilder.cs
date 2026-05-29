@@ -34,7 +34,7 @@ namespace Room2Scan.Bridge.Editor
             Directory.CreateDirectory(outputPath);
             EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             EditorUserBuildSettings.exportAsGoogleAndroidProject = true;
-            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.scan2room.unity");
+            PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.Android, "com.scan2room.unity");
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
 
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
