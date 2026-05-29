@@ -38,3 +38,5 @@ Thumbs.db
 *.apk
 *.aab
 *.unitypackage
+/Assets/StreamingAssets/replica/*.glb
+/Assets/StreamingAssets/replica/*.gltf

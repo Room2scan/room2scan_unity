@@ -44,7 +44,7 @@ Both directions use the same `unity-bridge/v1` envelope.
 
 ## Unity to RN Events
 
-- `RoomLoaded`: payload `{ "roomId": "...", "success": true }`
+- `RoomLoaded`: payload `{ "roomId": "...", "success": boolean, "meshUri": "...", "normalizedMeshUri": optional string, "colliderCount": optional number, "bounds": optional AABB, "error": optional error }`
 - `FurnitureCatalogLoaded`: payload `{ "catalogId": "...", "success": true, "itemCount": number }`
 - `LayoutLoaded`: payload `{ "layoutId": optional string, "success": true }`
 - `FurnitureAdded`: payload `{ "instanceId": "...", "catalogId": "...", "validation": item validation }`

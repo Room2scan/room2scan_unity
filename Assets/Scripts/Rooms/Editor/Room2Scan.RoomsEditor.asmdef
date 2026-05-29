@@ -1,0 +1,21 @@
+{
+    "name": "Room2Scan.RoomsEditor",
+    "rootNamespace": "Room2Scan.Rooms.Editor",
+    "references": [
+        "Room2Scan.Runtime",
+        "glTFast",
+        "glTFast.Export",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

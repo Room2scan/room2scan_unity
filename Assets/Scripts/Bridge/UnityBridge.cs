@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Room2Scan.Rooms;
 using UnityEngine;
 
 namespace Room2Scan.Bridge
@@ -114,8 +115,17 @@ namespace Room2Scan.Bridge
             switch (envelope.name)
             {
                 case "LoadRoom":
-                    currentRoomId = ExtractString(envelopeJson, "roomId", DefaultRoomId);
-                    SendRoomLoaded(envelope.requestId, currentRoomId);
+                    RoomManager.GetOrCreateInstance().LoadRoomFromBridgeEnvelope(
+                        envelopeJson,
+                        result =>
+                        {
+                            if (result.SuccessFlag)
+                            {
+                                currentRoomId = result.RoomId;
+                            }
+
+                            SendRoomLoaded(envelope.requestId, result);
+                        });
                     break;
                 case "LoadFurnitureCatalog":
                     SendFurnitureCatalogLoaded(envelope.requestId, ExtractString(envelopeJson, "catalogId", "mock_catalog"), 0);
@@ -124,6 +134,7 @@ namespace Room2Scan.Bridge
                     SendLayoutSaved(envelope.requestId);
                     break;
                 case "ResetEditor":
+                    RoomManager.GetOrCreateInstance().ClearRoom();
                     currentRoomId = DefaultRoomId;
                     SendEditorReset(envelope.requestId);
                     break;
@@ -133,9 +144,38 @@ namespace Room2Scan.Bridge
             }
         }
 
-        private void SendRoomLoaded(string requestId, string roomId)
+        private void SendRoomLoaded(string requestId, RoomLoadResult result)
         {
-            SendToRN(BuildEnvelope("RoomLoaded", "event", requestId, $"{{\"roomId\":\"{EscapeJson(roomId)}\",\"success\":true}}"));
+            var success = result.SuccessFlag ? "true" : "false";
+            var roomId = string.IsNullOrWhiteSpace(result.RoomId) ? DefaultRoomId : result.RoomId;
+            var payload =
+                "{" +
+                $"\"roomId\":\"{EscapeJson(roomId)}\"," +
+                $"\"success\":{success}," +
+                $"\"meshUri\":\"{EscapeJson(result.MeshUri)}\"";
+
+            if (result.SuccessFlag)
+            {
+                var bounds = result.Bounds;
+                payload +=
+                    $",\"normalizedMeshUri\":\"{EscapeJson(result.NormalizedMeshUri)}\"" +
+                    $",\"colliderCount\":{result.ColliderCount}" +
+                    ",\"bounds\":{" +
+                    $"\"min\":{{\"x\":{FormatFloat(bounds.min.x)},\"y\":{FormatFloat(bounds.min.y)},\"z\":{FormatFloat(bounds.min.z)}}}," +
+                    $"\"max\":{{\"x\":{FormatFloat(bounds.max.x)},\"y\":{FormatFloat(bounds.max.y)},\"z\":{FormatFloat(bounds.max.z)}}}" +
+                    "}";
+            }
+            else
+            {
+                payload +=
+                    ",\"error\":{" +
+                    $"\"code\":\"{EscapeJson(result.ErrorCode)}\"," +
+                    $"\"message\":\"{EscapeJson(result.ErrorMessage)}\"" +
+                    "}";
+            }
+
+            payload += "}";
+            SendToRN(BuildEnvelope("RoomLoaded", "event", requestId, payload));
         }
 
         private void SendFurnitureCatalogLoaded(string requestId, string catalogId, int itemCount)
@@ -209,6 +249,11 @@ namespace Room2Scan.Bridge
             return string.IsNullOrEmpty(value)
                 ? string.Empty
                 : value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
+        }
+
+        private static string FormatFloat(float value)
+        {
+            return value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static string UnescapeJson(string value)

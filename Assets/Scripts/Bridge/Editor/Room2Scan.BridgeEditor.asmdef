@@ -1,0 +1,19 @@
+{
+    "name": "Room2Scan.BridgeEditor",
+    "rootNamespace": "Room2Scan.Bridge.Editor",
+    "references": [
+        "Room2Scan.Runtime",
+        "Room2Scan.RoomsEditor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

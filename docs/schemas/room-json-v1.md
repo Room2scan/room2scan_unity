@@ -48,6 +48,15 @@ For v1, the server should:
 
 For the current local sample, `room0_mesh.ply` appears to be `Z-up`. The example records that source detail only as provenance. Unity should still consume only the final `mesh.uri` GLB and the normalized room JSON fields.
 
+## Local PLY test fallback
+
+Unity includes an editor/development-only fallback for local Replica PLY files so we can preview rooms before the server-side GLB converter is ready.
+
+- Use Unity menu `Room2Scan > P1 > Send Local PLY LoadRoom`.
+- This sends `replica/room0_mesh.ply` through the same `LoadRoom` bridge path.
+- The fallback remaps Replica source coordinates from `(x, y, z)` to Unity room coordinates `(x, z, y)` and floor-normalizes the mesh.
+- This fallback is intentionally not the production mobile contract. Release runtime should still receive `mesh.format = "glb"` and a GLB `mesh.uri`.
+
 ## Optional fields
 
 - `semantics`: optional Replica semantic labels and instances.
