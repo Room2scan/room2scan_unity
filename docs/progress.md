@@ -32,16 +32,25 @@
 - [x] `npm run android` 빌드 및 실행 확인
 - [x] Unity 뷰 렌더링 확인 (에뮬레이터) ✅
 
-### P1 — 가구 조작 기능
+### P1 — 가구 조작 기능 ✅
 > 전제: P0.5 완료 (2026-05-29) — 에뮬레이터에서 Unity 뷰 RN 앱 내 렌더링 확인
-- [ ] 가구 추가 (AddFurniture 명령)
-- [ ] 가구 선택 / 회전 / 삭제
-- [ ] 충돌 검사 및 유효성 검사
-- [ ] layout-json/v1 저장 및 불러오기
+- [x] 가구 추가 (AddFurniture 명령) — 큐브 프리미티브, 파란색 머티리얼
+- [x] 가구 선택 (SelectFurniture) — 선택 시 노란색으로 색상 변경
+- [x] 가구 회전 (RotateSelected, deltaDeg=45)
+- [x] 가구 삭제 (DeleteSelected)
+- [x] 에디터 리셋 (ResetEditor — 룸 + 가구 전체 초기화)
+- [x] layout-json/v1 저장 — FurnitureManager.GetLayoutItems() 실제 데이터 직렬화
+- [ ] 충돌 검사 및 유효성 검사 (P2)
 
 ---
 
 ## 작업 로그
+
+### 2026-05-29 (P1 완료)
+- **FurnitureManager.cs 신규**: AddFurniture / SelectFurniture / RotateSelected / DeleteSelected / ClearAll / GetLayoutItems 완전 구현
+- **UnityBridge.cs 업데이트**: P1 명령 핸들러 추가, BridgeAddFurnitureEnvelope / BridgeRotateEnvelope 직렬화 클래스 추가, SendLayoutSaved가 실제 GetLayoutItems() 데이터를 직렬화
+- **unityBridge.ts 업데이트**: createAddFurniturePayload / createSelectFurniturePayload / createRotateSelectedPayload / createDeleteSelectedPayload / createResetEditorPayload / createLoadFurnitureCatalogPayload 추가
+- **UnityEditorScreen.tsx 업데이트**: 가구 툴바 (Add / Select / Rotate / Delete) + ResetEditor 버튼 추가, 비활성화 상태 처리, 아이템 카운터 표시
 
 ### 2026-05-29
 - **두 레포 상태 점검**

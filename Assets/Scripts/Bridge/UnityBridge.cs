@@ -130,11 +130,24 @@ namespace Room2Scan.Bridge
                 case "LoadFurnitureCatalog":
                     SendFurnitureCatalogLoaded(envelope.requestId, ExtractString(envelopeJson, "catalogId", "mock_catalog"), 0);
                     break;
+                case "AddFurniture":
+                    HandleAddFurniture(envelopeJson, envelope.requestId);
+                    break;
+                case "SelectFurniture":
+                    HandleSelectFurniture(envelopeJson, envelope.requestId);
+                    break;
+                case "RotateSelected":
+                    HandleRotateSelected(envelopeJson, envelope.requestId);
+                    break;
+                case "DeleteSelected":
+                    HandleDeleteSelected(envelope.requestId);
+                    break;
                 case "SaveLayout":
                     SendLayoutSaved(envelope.requestId);
                     break;
                 case "ResetEditor":
                     RoomManager.GetOrCreateInstance().ClearRoom();
+                    FurnitureManager.GetOrCreateInstance().ClearAll();
                     currentRoomId = DefaultRoomId;
                     SendEditorReset(envelope.requestId);
                     break;
@@ -142,6 +155,64 @@ namespace Room2Scan.Bridge
                     SendEditorError(envelope.requestId, envelope.name, "unknown_command", $"Unknown command: {envelope.name}");
                     break;
             }
+        }
+
+        private void HandleAddFurniture(string envelopeJson, string requestId)
+        {
+            var envelope = JsonUtility.FromJson<BridgeAddFurnitureEnvelope>(envelopeJson);
+            var p = envelope?.payload;
+            if (p == null || string.IsNullOrWhiteSpace(p.instanceId))
+            {
+                SendEditorError(requestId, "AddFurniture", "invalid_payload", "AddFurniture requires payload.instanceId.");
+                return;
+            }
+
+            var position = p.position != null ? new Vector3(p.position.x, p.position.y, p.position.z) : Vector3.zero;
+            var result = FurnitureManager.GetOrCreateInstance().AddFurniture(p.instanceId, p.catalogId ?? "unknown", position);
+            if (result.Success)
+                SendFurnitureAdded(requestId, result.InstanceId, result.Position);
+            else
+                SendEditorError(requestId, "AddFurniture", result.ErrorCode, result.ErrorMessage);
+        }
+
+        private void HandleSelectFurniture(string envelopeJson, string requestId)
+        {
+            var instanceId = ExtractString(envelopeJson, "instanceId", null);
+            if (string.IsNullOrWhiteSpace(instanceId))
+            {
+                SendEditorError(requestId, "SelectFurniture", "invalid_payload", "SelectFurniture requires payload.instanceId.");
+                return;
+            }
+
+            var success = FurnitureManager.GetOrCreateInstance().SelectFurniture(instanceId);
+            SendToRN(BuildEnvelope("FurnitureSelected", "event", requestId,
+                $"{{\"instanceId\":\"{EscapeJson(instanceId)}\",\"success\":{(success ? "true" : "false")}}}"));
+        }
+
+        private void HandleRotateSelected(string envelopeJson, string requestId)
+        {
+            var envelope = JsonUtility.FromJson<BridgeRotateEnvelope>(envelopeJson);
+            var deltaDeg = envelope?.payload?.deltaDeg ?? 45f;
+            var success = FurnitureManager.GetOrCreateInstance().RotateSelected(deltaDeg);
+            SendToRN(BuildEnvelope("FurnitureTransformed", "event", requestId,
+                $"{{\"success\":{(success ? "true" : "false")}}}"));
+        }
+
+        private void HandleDeleteSelected(string requestId)
+        {
+            var success = FurnitureManager.GetOrCreateInstance().DeleteSelected();
+            SendToRN(BuildEnvelope("FurnitureDeleted", "event", requestId,
+                $"{{\"success\":{(success ? "true" : "false")}}}"));
+        }
+
+        private static void SendFurnitureAdded(string requestId, string instanceId, Vector3 position)
+        {
+            var payload = "{" +
+                $"\"instanceId\":\"{EscapeJson(instanceId)}\"," +
+                "\"success\":true," +
+                $"\"position\":{{\"x\":{FormatFloat(position.x)},\"y\":{FormatFloat(position.y)},\"z\":{FormatFloat(position.z)}}}" +
+                "}";
+            SendToRN(BuildEnvelope("FurnitureAdded", "event", requestId, payload));
         }
 
         private void SendRoomLoaded(string requestId, RoomLoadResult result)
@@ -186,19 +257,36 @@ namespace Room2Scan.Bridge
         private void SendLayoutSaved(string requestId)
         {
             var savedAt = DateTime.UtcNow.ToString("o");
+            var layoutItems = FurnitureManager.GetOrCreateInstance().GetLayoutItems();
+
+            var itemsJson = new System.Text.StringBuilder("[");
+            for (var i = 0; i < layoutItems.Count; i++)
+            {
+                var item = layoutItems[i];
+                if (i > 0) itemsJson.Append(',');
+                itemsJson.Append('{');
+                itemsJson.Append($"\"instanceId\":\"{EscapeJson(item.InstanceId)}\",");
+                itemsJson.Append($"\"catalogId\":\"{EscapeJson(item.CatalogId)}\",");
+                itemsJson.Append($"\"position\":{{\"x\":{FormatFloat(item.Position.x)},\"y\":{FormatFloat(item.Position.y)},\"z\":{FormatFloat(item.Position.z)}}},");
+                itemsJson.Append($"\"rotationYDeg\":{FormatFloat(item.RotationYDeg)},");
+                itemsJson.Append($"\"scale\":{FormatFloat(item.Scale)}");
+                itemsJson.Append('}');
+            }
+            itemsJson.Append(']');
+
             var layoutJson =
                 "{" +
                 "\"layout\":{" +
                 "\"schemaVersion\":\"layout-json/v1\"," +
-                "\"layoutId\":\"mock_layout_0001\"," +
+                $"\"layoutId\":\"layout_{Guid.NewGuid():N}\"," +
                 $"\"roomId\":\"{EscapeJson(currentRoomId)}\"," +
                 "\"roomSchemaVersion\":\"room-json/v1\"," +
-                "\"editorSessionId\":\"unity_p0_mock_session\"," +
+                $"\"editorSessionId\":\"unity_session_{Guid.NewGuid():N}\"," +
                 $"\"savedAt\":\"{savedAt}\"," +
                 "\"coordinateSystem\":{\"unit\":\"meter\",\"handedness\":\"left\",\"upAxis\":\"+Y\",\"forwardAxis\":\"+Z\"}," +
-                "\"items\":[]," +
+                $"\"items\":{itemsJson}," +
                 "\"validation\":{\"isValid\":true,\"invalidItemIds\":[],\"warnings\":[]}," +
-                "\"extensions\":{\"source\":\"p0_mock\"}" +
+                "\"extensions\":{\"source\":\"p1\"}" +
                 "}" +
                 "}";
 
@@ -331,6 +419,40 @@ namespace Room2Scan.Bridge
             }
 
             return null;
+        }
+
+        [Serializable]
+        private sealed class BridgeAddFurnitureEnvelope
+        {
+            public AddFurniturePayload payload;
+
+            [Serializable]
+            public sealed class AddFurniturePayload
+            {
+                public string instanceId;
+                public string catalogId;
+                public Vector3Json position;
+            }
+        }
+
+        [Serializable]
+        private sealed class BridgeRotateEnvelope
+        {
+            public RotatePayload payload;
+
+            [Serializable]
+            public sealed class RotatePayload
+            {
+                public float deltaDeg;
+            }
+        }
+
+        [Serializable]
+        private sealed class Vector3Json
+        {
+            public float x;
+            public float y;
+            public float z;
         }
     }
 }
