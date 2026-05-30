@@ -32,15 +32,28 @@ namespace Room2Scan.Bridge.Editor
             var bridge = UnityBridge.GetOrCreateInstance();
 
             // ── Room ──────────────────────────────────────────────────────────
-            GUILayout.Label("Room", EditorStyles.boldLabel);
-            if (GUILayout.Button("LoadRoom (mock)"))
+            GUILayout.Label("Room (ReplicaCAD)", EditorStyles.boldLabel);
+
+            if (GUILayout.Button("Load apt_0  (안방)"))
             {
-                ceilingHidden = false;
-                originalMeshes.Clear();
-                SendLoadRoom(bridge);
-                // 0.5초 후 카메라 컨트롤러 부착 (비동기 로드 대기)
+                ceilingHidden = false; originalMeshes.Clear();
+                SendLoadReplicaCAD(bridge, "apt_0");
                 EditorApplication.delayCall += AttachOrbitCameraDelayed;
             }
+            if (GUILayout.Button("Load apt_1  (거실)"))
+            {
+                ceilingHidden = false; originalMeshes.Clear();
+                SendLoadReplicaCAD(bridge, "apt_1");
+                EditorApplication.delayCall += AttachOrbitCameraDelayed;
+            }
+            if (GUILayout.Button("Load apt_2  (작업실)"))
+            {
+                ceilingHidden = false; originalMeshes.Clear();
+                SendLoadReplicaCAD(bridge, "apt_2");
+                EditorApplication.delayCall += AttachOrbitCameraDelayed;
+            }
+
+            EditorGUILayout.Space(4);
             if (GUILayout.Button("ResetEditor"))
             {
                 ceilingHidden = false;
@@ -222,17 +235,23 @@ namespace Room2Scan.Bridge.Editor
 
         private static void SendRaw(UnityBridge bridge, string json) => bridge.ReceiveFromRN(json);
 
-        private static void SendLoadRoom(UnityBridge bridge, string roomId = "room0", string meshPath = null)
-        {
-            if (meshPath == null)
-                meshPath = System.IO.Path.GetFullPath(
-                    System.IO.Path.Combine(Application.dataPath, "..", "replica", roomId + "_mesh.ply"))
-                    .Replace("\\", "/");
+        // ── ReplicaCAD GLB loader ─────────────────────────────────────────
+        // Root of the local ReplicaCAD dataset  (adjust if your data lives elsewhere)
+        private const string RCA = @"E:\unity\replica_cad_data";
 
-            var format = meshPath.EndsWith(".ply", System.StringComparison.OrdinalIgnoreCase) ? "ply" : "glb";
+        private static void SendLoadReplicaCAD(UnityBridge bridge, string aptId)
+        {
+            // Windows absolute paths – RoomManager.NormalizeMeshUri converts to file:// URI
+            var meshPath      = RCA + @"\stages\frl_apartment_stage.glb";
+            var sceneJsonPath = RCA + @"\configs\scenes\" + aptId + @".scene_instance.json";
+            var objectsDir    = RCA + @"\objects";
+
+            // Escape backslashes for JSON
+            string J(string s) => s.Replace("\\", "\\\\");
+
             var room = "{\"schemaVersion\":\"room-json/v1\"," +
-                       "\"roomId\":\"" + roomId + "\"," +
-                       "\"mesh\":{\"uri\":\"" + meshPath + "\",\"format\":\"" + format + "\"}," +
+                       "\"roomId\":\"replica_cad_" + aptId + "\"," +
+                       "\"mesh\":{\"uri\":\"" + J(meshPath) + "\",\"format\":\"glb\"}," +
                        "\"coordinateSystem\":{" +
                            "\"unit\":\"meter\"," +
                            "\"handedness\":\"left\"," +
@@ -244,10 +263,14 @@ namespace Room2Scan.Bridge.Editor
                                "\"scaleMultiplier\":1" +
                            "}}," +
                        "\"bounds\":{" +
-                           "\"min\":{\"x\":-0.8794,\"y\":0,\"z\":-1.186}," +
-                           "\"max\":{\"x\":6.8852,\"y\":2.8078,\"z\":3.5123}" +
-                       "}}";
+                           "\"min\":{\"x\":-5.5,\"y\":0.0,\"z\":-1.5}," +
+                           "\"max\":{\"x\":5.5,\"y\":3.2,\"z\":8.5}" +
+                       "}," +
+                       "\"sceneInstancePath\":\"" + J(sceneJsonPath) + "\"," +
+                       "\"objectsBasePath\":\"" + J(objectsDir) + "\"}";
+
             SendRaw(bridge, Command("LoadRoom", "{\"room\":" + room + "}"));
+            Debug.Log($"[BridgeDebug] Sent LoadRoom for {aptId} — stage GLB + scene instance at {sceneJsonPath}");
         }
 
         private static string Command(string name, string payload)
