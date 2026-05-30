@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using GLTFast;
 using UnityEngine;
 
 namespace Room2Scan.Rooms
@@ -46,6 +49,10 @@ namespace Room2Scan.Rooms
 
         // ── Core furniture operations ─────────────────────────────────────────────────
 
+        /// <summary>
+        /// Synchronous add — creates a fallback cube.
+        /// Used for user-triggered AddFurniture from the catalog.
+        /// </summary>
         public AddFurnitureResult AddFurniture(string instanceId, string catalogId, Vector3 position)
         {
             if (string.IsNullOrWhiteSpace(instanceId))
@@ -69,18 +76,77 @@ namespace Room2Scan.Rooms
             return AddFurnitureResult.Ok(instanceId, position);
         }
 
+        /// <summary>
+        /// Async add — loads a real GLB via GLTFast.
+        /// Falls back to a cube if the GLB is missing or fails to load.
+        /// Used by SceneInstanceLoader when auto-placing objects from a scene JSON.
+        /// </summary>
+        public async Task<AddFurnitureResult> AddFurnitureFromGlbAsync(
+            string instanceId, string catalogId, string glbPath,
+            Vector3 position, Quaternion rotation)
+        {
+            if (string.IsNullOrWhiteSpace(instanceId))
+                return AddFurnitureResult.Failure("missing_instance_id", "instanceId is required.");
+            if (items.ContainsKey(instanceId))
+                return AddFurnitureResult.Failure("duplicate_instance_id", $"Instance '{instanceId}' already exists.");
+
+            // Parent object carries position / rotation; GLB mesh is a child.
+            var parent = new GameObject($"Furniture_{SanitizeName(catalogId)}_{instanceId}");
+            parent.transform.position = position;
+            parent.transform.rotation = rotation;
+            if (Application.isPlaying) DontDestroyOnLoad(parent);
+            else parent.hideFlags = HideFlags.DontSave;
+
+            var glbLoaded = false;
+
+            if (!string.IsNullOrWhiteSpace(glbPath) && File.Exists(glbPath))
+            {
+                var uri = NormalizePath(glbPath);
+                try
+                {
+                    var gltf = new GltfImport();
+                    if (await gltf.Load(uri))
+                        glbLoaded = await gltf.InstantiateMainSceneAsync(parent.transform);
+                    else
+                        gltf.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning(
+                        $"Room2Scan FurnitureManager: GLB load failed for '{catalogId}': {ex.Message}");
+                }
+            }
+
+            if (!glbLoaded)
+            {
+                // Fallback: small coloured cube so the item is still visible.
+                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cube.transform.SetParent(parent.transform, false);
+                cube.transform.localScale = new Vector3(0.4f, 0.4f, 0.4f);
+                cube.GetComponent<Renderer>().material = CreateMaterial(DefaultColor);
+            }
+
+            // GLB-loaded instances own their materials internally; no separate Material ref.
+            items[instanceId] = new FurnitureInstance(instanceId, catalogId, parent, null);
+            Debug.Log($"Room2Scan FurnitureManager: scene-placed '{catalogId}' ({instanceId}) at {position}");
+            return AddFurnitureResult.Ok(instanceId, position);
+        }
+
         public bool SelectFurniture(string instanceId)
         {
             // Deselect current
             if (selectedInstanceId != null && items.TryGetValue(selectedInstanceId, out var prev))
-                prev.Material.color = prev.Visible ? DefaultColor : HiddenColor;
+            {
+                if (prev.Material != null)
+                    prev.Material.color = prev.Visible ? DefaultColor : HiddenColor;
+            }
 
             selectedInstanceId = null;
 
             if (!items.TryGetValue(instanceId, out var item)) return false;
 
-            item.Material.color = SelectedColor;
-            selectedInstanceId  = instanceId;
+            if (item.Material != null) item.Material.color = SelectedColor;
+            selectedInstanceId = instanceId;
             return true;
         }
 
@@ -127,14 +193,15 @@ namespace Room2Scan.Rooms
         {
             if (!items.TryGetValue(instanceId, out var item)) return false;
             item.Visible = visible;
-            var r = item.GameObject.GetComponent<Renderer>();
+
+            var r = item.GameObject.GetComponentInChildren<Renderer>(true);
             if (r != null) r.enabled = visible;
 
-            // reapply tint on material so selection state is preserved
-            if (instanceId == selectedInstanceId)
-                item.Material.color = SelectedColor;
-            else
-                item.Material.color = visible ? DefaultColor : HiddenColor;
+            if (item.Material != null)
+                item.Material.color = instanceId == selectedInstanceId
+                    ? SelectedColor
+                    : (visible ? DefaultColor : HiddenColor);
+
             return true;
         }
 
@@ -168,7 +235,7 @@ namespace Room2Scan.Rooms
             return result;
         }
 
-        /// <summary>Returns the transform of the currently selected item, or null if nothing is selected.</summary>
+        /// <summary>Returns the transform of the currently selected item, or null.</summary>
         public TransformData? GetSelectedTransform()
         {
             if (selectedInstanceId == null || !items.TryGetValue(selectedInstanceId, out var item))
@@ -187,9 +254,30 @@ namespace Room2Scan.Rooms
 
         private static void DestroyFurnitureInstance(FurnitureInstance item)
         {
-            if (Application.isPlaying) { Destroy(item.Material); Destroy(item.GameObject); }
-            else { DestroyImmediate(item.Material); DestroyImmediate(item.GameObject); }
+            if (Application.isPlaying)
+            {
+                if (item.Material != null) Destroy(item.Material);
+                Destroy(item.GameObject);
+            }
+            else
+            {
+                if (item.Material != null) DestroyImmediate(item.Material);
+                DestroyImmediate(item.GameObject);
+            }
         }
+
+        /// <summary>Converts a local file path to a file:// URI suitable for GLTFast.</summary>
+        private static string NormalizePath(string path)
+        {
+            if (LooksLikeWindowsAbsolutePath(path) || Path.IsPathRooted(path))
+                return new Uri(path).AbsoluteUri;
+            if (Uri.TryCreate(path, UriKind.Absolute, out _))
+                return path;
+            return path;
+        }
+
+        private static bool LooksLikeWindowsAbsolutePath(string v) =>
+            v.Length >= 3 && char.IsLetter(v[0]) && v[1] == ':' && (v[2] == '\\' || v[2] == '/');
 
         private static string SanitizeName(string value)
         {
@@ -204,6 +292,7 @@ namespace Room2Scan.Rooms
             public string     InstanceId  { get; }
             public string     CatalogId   { get; }
             public GameObject GameObject  { get; }
+            /// <summary>Null for GLB-loaded instances (they own their materials internally).</summary>
             public Material   Material    { get; }
             public bool       Visible     { get; set; } = true;
             public bool       Locked      { get; set; } = false;
@@ -283,12 +372,12 @@ namespace Room2Scan.Rooms
 
         public sealed class DuplicateFurnitureResult
         {
-            public bool    Success           { get; }
-            public string  NewInstanceId     { get; }
+            public bool    Success            { get; }
+            public string  NewInstanceId      { get; }
             public string  OriginalInstanceId { get; }
-            public Vector3 Position          { get; }
-            public string  ErrorCode         { get; }
-            public string  ErrorMessage      { get; }
+            public Vector3 Position           { get; }
+            public string  ErrorCode          { get; }
+            public string  ErrorMessage       { get; }
 
             private DuplicateFurnitureResult(bool success, string newId, string origId, Vector3 pos, string code, string msg)
             {

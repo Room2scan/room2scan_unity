@@ -82,11 +82,18 @@ namespace Room2Scan.Bridge
             {
                 // ── Room ──────────────────────────────────────────────────────
                 case "LoadRoom":
+                    var sceneJsonPath  = ExtractString(envelopeJson, "sceneInstancePath", null);
+                    var objectsBaseDir = ExtractString(envelopeJson, "objectsBasePath",   null);
                     RoomManager.GetOrCreateInstance().LoadRoomFromBridgeEnvelope(
                         envelopeJson,
                         result =>
                         {
-                            if (result.SuccessFlag) currentRoomId = result.RoomId;
+                            if (result.SuccessFlag)
+                            {
+                                currentRoomId = result.RoomId;
+                                if (!string.IsNullOrWhiteSpace(sceneJsonPath))
+                                    LoadSceneInstanceAndNotify(sceneJsonPath, objectsBaseDir);
+                            }
                             SendRoomLoaded(envelope.requestId, result);
                         });
                     break;
@@ -183,6 +190,20 @@ namespace Room2Scan.Bridge
                         $"Unknown command: {envelope.name}");
                     break;
             }
+        }
+
+        // ── Scene-instance auto-load ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Fire-and-forget: loads all furniture from a ReplicaCAD scene_instance JSON,
+        /// then broadcasts ObjectListUpdated so the RN editor list stays in sync.
+        /// </summary>
+        private static async void LoadSceneInstanceAndNotify(string jsonPath, string objectsDir)
+        {
+            Debug.Log($"Room2Scan Bridge: auto-loading scene instance from '{jsonPath}'");
+            var count = await SceneInstanceLoader.LoadAsync(jsonPath, objectsDir ?? "objects");
+            Debug.Log($"Room2Scan Bridge: scene instance placed {count} objects.");
+            SendObjectListUpdated();
         }
 
         // ── Command handlers ──────────────────────────────────────────────────────────
