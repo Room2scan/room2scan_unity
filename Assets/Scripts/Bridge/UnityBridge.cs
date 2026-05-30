@@ -98,6 +98,10 @@ namespace Room2Scan.Bridge
                         });
                     break;
 
+                case "CreateProceduralRoom":
+                    HandleCreateProceduralRoom(envelopeJson, envelope.requestId);
+                    break;
+
                 case "ResetEditor":
                     RoomManager.GetOrCreateInstance().ClearRoom();
                     FurnitureManager.GetOrCreateInstance().ClearAll();
@@ -399,6 +403,78 @@ namespace Room2Scan.Bridge
             sb.Append(']');
             SendToRN(BuildEnvelope("ObjectListUpdated", "event", null,
                 $"{{\"items\":{sb}}}"));
+        }
+
+        // ── P4: Procedural room ───────────────────────────────────────────────────────
+
+        private void HandleCreateProceduralRoom(string envelopeJson, string requestId)
+        {
+            // Clear any existing room first
+            RoomManager.GetOrCreateInstance().ClearRoom();
+            FurnitureManager.GetOrCreateInstance().ClearAll();
+
+            var spec = ProceduralRoomBuilder.ParseFromJson(envelopeJson);
+            var result = ProceduralRoomBuilder.Build(spec);
+
+            if (!result.Success)
+            {
+                SendEditorError(requestId, "CreateProceduralRoom", "build_failed", result.ErrorMessage);
+                return;
+            }
+
+            currentRoomId = spec.RoomId;
+
+            // Attach orbit camera
+            AttachOrbitCamera(result.Bounds);
+
+            // Notify RN
+            var b = result.Bounds;
+            var payload =
+                "{" +
+                $"\"roomId\":\"{EscapeJson(spec.RoomId)}\"," +
+                $"\"name\":\"{EscapeJson(spec.Name)}\"," +
+                $"\"width\":{spec.Width.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}," +
+                $"\"length\":{spec.Length.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}," +
+                $"\"height\":{spec.Height.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}," +
+                "\"success\":true," +
+                $"\"bounds\":{{\"min\":{{\"x\":{FormatFloat(b.min.x)},\"y\":{FormatFloat(b.min.y)},\"z\":{FormatFloat(b.min.z)}}}," +
+                $"\"max\":{{\"x\":{FormatFloat(b.max.x)},\"y\":{FormatFloat(b.max.y)},\"z\":{FormatFloat(b.max.z)}}}}}" +
+                "}";
+
+            // Also fire RoomLoaded so existing UnityEditorScreen code recognises the room
+            var roomLoadedPayload =
+                "{" +
+                $"\"roomId\":\"{EscapeJson(spec.RoomId)}\"," +
+                "\"success\":true," +
+                $"\"bounds\":{{\"min\":{{\"x\":{FormatFloat(b.min.x)},\"y\":{FormatFloat(b.min.y)},\"z\":{FormatFloat(b.min.z)}}}," +
+                $"\"max\":{{\"x\":{FormatFloat(b.max.x)},\"y\":{FormatFloat(b.max.y)},\"z\":{FormatFloat(b.max.z)}}}}}" +
+                "}";
+
+            SendToRN(BuildEnvelope("ProceduralRoomCreated", "event", requestId, payload));
+            SendToRN(BuildEnvelope("RoomLoaded",            "event", requestId, roomLoadedPayload));
+
+            Debug.Log($"[UnityBridge] Procedural room '{spec.Name}' built: {spec.Width}x{spec.Length}x{spec.Height}m");
+        }
+
+        /// <summary>Position the main camera to see the whole room isometrically.</summary>
+        private static void AttachOrbitCamera(Bounds bounds)
+        {
+            var cam = Camera.main ?? UnityEngine.Object.FindFirstObjectByType<Camera>();
+            if (cam == null) return;
+
+            cam.orthographic = false;
+            cam.fieldOfView  = 50f;
+
+            // Remove existing controller
+            var existing = cam.GetComponent<OrbitCameraController>();
+            if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
+
+            var controller = cam.gameObject.AddComponent<OrbitCameraController>();
+            var pivot  = new Vector3(bounds.center.x, bounds.min.y + bounds.size.y * 0.35f, bounds.center.z);
+            var fovRad = cam.fieldOfView * Mathf.Deg2Rad;
+            var half   = Mathf.Max(bounds.size.x, bounds.size.z) * 0.5f;
+            var dist   = Mathf.Clamp((half / Mathf.Tan(fovRad * 0.5f)) * 1.15f, 3f, 30f);
+            controller.SetPivotAndDistance(pivot, dist, initialYaw: -135f, initialPitch: 45f);
         }
 
         private void SendRoomLoaded(string requestId, RoomLoadResult result)
