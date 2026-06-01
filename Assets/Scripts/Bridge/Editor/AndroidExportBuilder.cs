@@ -8,7 +8,7 @@ namespace Room2Scan.Bridge.Editor
 {
     public static class AndroidExportBuilder
     {
-        private const string DefaultOutputPath = "C:/Users/park/room2scan_app/unity/builds/android";
+        private const string DefaultOutputPath = "E:/unity/room2scan_unity_android";
         private const string FallbackScenePath = "Assets/Scenes/SampleScene.unity";
 
         [MenuItem("Room2Scan/Build/Export Android Unity Library")]

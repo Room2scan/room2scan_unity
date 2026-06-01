@@ -20,6 +20,10 @@ namespace Room2Scan.Bridge
 
         public static UnityBridge Instance => instance;
 
+        // ── Public properties (read by FurnitureDragController) ───────────────────
+        public string ActiveTool  => activeTool;
+        public bool   SnapEnabled => snapEnabled;
+
         // ── Lifecycle ────────────────────────────────────────────────────────────────
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -91,6 +95,8 @@ namespace Room2Scan.Bridge
                             if (result.SuccessFlag)
                             {
                                 currentRoomId = result.RoomId;
+                                FurnitureManager.SetRoomBounds(result.Bounds);
+                                EnsureFurnitureDragController();
                                 if (!string.IsNullOrWhiteSpace(sceneJsonPath))
                                     LoadSceneInstanceAndNotify(sceneJsonPath, objectsBaseDir);
                             }
@@ -136,6 +142,11 @@ namespace Room2Scan.Bridge
                     HandleDeleteSelected(envelope.requestId);
                     break;
 
+                // ── Move (absolute position from RN) ─────────────────────────
+                case "MoveFurniture":
+                    HandleMoveFurniture(envelopeJson, envelope.requestId);
+                    break;
+
                 // ── Visibility / lock ─────────────────────────────────────────
                 case "SetObjectVisibility":
                     HandleSetVisibility(envelopeJson, envelope.requestId);
@@ -156,7 +167,12 @@ namespace Room2Scan.Bridge
                 case "SetViewMode":
                     var mode = ExtractString(envelopeJson, "mode", "3D");
                     Debug.Log($"Room2Scan Bridge: view mode = {mode}");
-                    // TODO P2: switch camera projection / position
+                    var viewCam = Camera.main ?? FindFirstObjectByType<Camera>();
+                    if (viewCam != null)
+                    {
+                        var orbit = viewCam.GetComponent<OrbitCameraController>();
+                        if (orbit != null) orbit.SetTopDown(mode == "2D");
+                    }
                     SendToRN(BuildEnvelope("ViewModeChanged", "event", envelope.requestId,
                         $"{{\"mode\":\"{EscapeJson(mode)}\"}}"));
                     break;
@@ -424,8 +440,10 @@ namespace Room2Scan.Bridge
 
             currentRoomId = spec.RoomId;
 
-            // Attach orbit camera
+            // Attach orbit camera, set room bounds, attach drag controller
             AttachOrbitCamera(result.Bounds);
+            FurnitureManager.SetRoomBounds(result.Bounds);
+            EnsureFurnitureDragController();
 
             // Notify RN
             var b = result.Bounds;
@@ -454,6 +472,76 @@ namespace Room2Scan.Bridge
             SendToRN(BuildEnvelope("RoomLoaded",            "event", requestId, roomLoadedPayload));
 
             Debug.Log($"[UnityBridge] Procedural room '{spec.Name}' built: {spec.Width}x{spec.Length}x{spec.Height}m");
+        }
+
+        // ── P5: Move + drag event helpers ─────────────────────────────────────────────
+
+        private void HandleMoveFurniture(string envelopeJson, string requestId)
+        {
+            var x = ExtractFloat(envelopeJson, "x", 0f);
+            var y = ExtractFloat(envelopeJson, "y", 0f);
+            var z = ExtractFloat(envelopeJson, "z", 0f);
+
+            var fm      = FurnitureManager.GetOrCreateInstance();
+            var success = fm.MoveSelected(x, y, z);
+            var t       = fm.GetSelectedTransform();
+            var pos     = t.HasValue ? t.Value.Position : new Vector3(x, y, z);
+
+            SendToRN(BuildEnvelope("FurnitureTransformed", "event", requestId,
+                "{\"success\":" + (success ? "true" : "false") +
+                ",\"instanceId\":\"" + EscapeJson(fm.SelectedInstanceId ?? string.Empty) + "\"" +
+                ",\"position\":{\"x\":" + FormatFloat(pos.x) +
+                ",\"y\":" + FormatFloat(pos.y) +
+                ",\"z\":" + FormatFloat(pos.z) + "}}"));
+        }
+
+        /// <summary>
+        /// Ensures a FurnitureDragController component is attached to the main camera.
+        /// Safe to call multiple times — checks for existing component first.
+        /// </summary>
+        private static void EnsureFurnitureDragController()
+        {
+            var cam = Camera.main ?? FindFirstObjectByType<Camera>();
+            if (cam == null) return;
+            if (cam.GetComponent<FurnitureDragController>() == null)
+                cam.gameObject.AddComponent<FurnitureDragController>();
+        }
+
+        // ── Public outbound events (called by FurnitureDragController) ───────────────
+
+        /// <summary>Broadcasts FurnitureSelected to RN (e.g. after tap-to-select).</summary>
+        public void SendFurnitureSelectedEvent(string instanceId, FurnitureManager.TransformData? t)
+        {
+            var tp = t.HasValue
+                ? ",\"position\":{\"x\":" + FormatFloat(t.Value.Position.x) +
+                  ",\"y\":" + FormatFloat(t.Value.Position.y) +
+                  ",\"z\":" + FormatFloat(t.Value.Position.z) + "}" +
+                  ",\"rotationYDeg\":" + FormatFloat(t.Value.RotationYDeg) +
+                  ",\"scale\":" + FormatFloat(t.Value.Scale)
+                : string.Empty;
+
+            SendToRN(BuildEnvelope("FurnitureSelected", "event", null,
+                "{\"instanceId\":\"" + EscapeJson(instanceId) + "\",\"success\":true" + tp + "}"));
+        }
+
+        /// <summary>Broadcasts FurnitureTransformed to RN after a drag completes.</summary>
+        public void SendFurnitureTransformedEvent(string instanceId, FurnitureManager.TransformData t)
+        {
+            SendToRN(BuildEnvelope("FurnitureTransformed", "event", null,
+                "{\"success\":true" +
+                ",\"instanceId\":\"" + EscapeJson(instanceId) + "\"" +
+                ",\"position\":{\"x\":" + FormatFloat(t.Position.x) +
+                ",\"y\":" + FormatFloat(t.Position.y) +
+                ",\"z\":" + FormatFloat(t.Position.z) + "}" +
+                ",\"rotationYDeg\":" + FormatFloat(t.RotationYDeg) + "}"));
+        }
+
+        /// <summary>Broadcasts CollisionStatus to RN (throttled — only on state change).</summary>
+        public void SendCollisionStatusEvent(string instanceId, bool hasCollision)
+        {
+            SendToRN(BuildEnvelope("CollisionStatus", "event", null,
+                "{\"instanceId\":\"" + EscapeJson(instanceId) + "\"" +
+                ",\"hasCollision\":" + (hasCollision ? "true" : "false") + "}"));
         }
 
         /// <summary>Position the main camera to see the whole room isometrically.</summary>
@@ -634,6 +722,14 @@ namespace Room2Scan.Bridge
         {
             var m = Regex.Match(json, $"\"{Regex.Escape(key)}\"\\s*:\\s*\"(?<v>(?:\\\\.|[^\"])*)\"");
             return m.Success ? UnescapeJson(m.Groups["v"].Value) : fallback;
+        }
+
+        private static float ExtractFloat(string json, string key, float fallback)
+        {
+            var m = Regex.Match(json, $"\"{Regex.Escape(key)}\"\\s*:\\s*([\\d.\\-]+)");
+            return m.Success
+                ? float.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
+                : fallback;
         }
 
         private static bool ExtractBool(string json, string key, bool fallback)

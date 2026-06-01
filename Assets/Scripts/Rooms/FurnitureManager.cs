@@ -9,9 +9,11 @@ namespace Room2Scan.Rooms
 {
     public sealed class FurnitureManager : MonoBehaviour
     {
-        private static readonly Color DefaultColor  = new Color(0.4f, 0.6f, 1.0f, 1f);
-        private static readonly Color SelectedColor = new Color(1.0f, 0.8f, 0.2f, 1f);
-        private static readonly Color HiddenColor   = new Color(0.4f, 0.6f, 1.0f, 0.25f);
+        private static readonly Color DefaultColor     = new Color(0.4f, 0.6f, 1.0f, 1f);
+        private static readonly Color SelectedColor   = new Color(1.0f, 0.8f, 0.2f, 1f);
+        private static readonly Color HiddenColor     = new Color(0.4f, 0.6f, 1.0f, 0.25f);
+        private static readonly Color CollisionColor  = new Color(1.0f, 0.22f, 0.22f, 1f);  // red  — overlap / wall breach
+        private static readonly Color PlacementOkColor= new Color(0.25f, 0.85f, 0.35f, 1f); // green — OK while dragging
 
         private static FurnitureManager instance;
 
@@ -20,10 +22,19 @@ namespace Room2Scan.Rooms
 
         private string selectedInstanceId;
 
+        /// <summary>
+        /// Room bounding box set by UnityBridge when a room is built or loaded.
+        /// Used by FurnitureDragController to clamp furniture inside the room.
+        /// </summary>
+        public static Bounds RoomBounds;
+
         // ── Public API ───────────────────────────────────────────────────────────────
 
-        public static FurnitureManager Instance => instance;
-        public string SelectedInstanceId => selectedInstanceId;
+        public static FurnitureManager Instance        => instance;
+        public string SelectedInstanceId               => selectedInstanceId;
+
+        /// <summary>Update the room bounds used for wall-collision clamping.</summary>
+        public static void SetRoomBounds(Bounds b) { RoomBounds = b; }
 
         public static FurnitureManager GetOrCreateInstance()
         {
@@ -62,11 +73,15 @@ namespace Room2Scan.Rooms
 
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = $"Furniture_{SanitizeName(catalogId)}_{instanceId}";
-            go.transform.position  = position;
+            go.transform.position   = position;
             go.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
 
             var mat = CreateMaterial(DefaultColor);
             go.GetComponent<Renderer>().material = mat;
+
+            // Identifier component — used by FurnitureDragController for tap-to-select
+            var identifier = go.AddComponent<FurnitureIdentifier>();
+            identifier.InstanceId = instanceId;
 
             if (Application.isPlaying) DontDestroyOnLoad(go);
             else go.hideFlags = HideFlags.DontSave;
@@ -96,6 +111,10 @@ namespace Room2Scan.Rooms
             parent.transform.rotation = rotation;
             if (Application.isPlaying) DontDestroyOnLoad(parent);
             else parent.hideFlags = HideFlags.DontSave;
+
+            // Identifier for tap-to-select raycasting
+            var identifier = parent.AddComponent<FurnitureIdentifier>();
+            identifier.InstanceId = instanceId;
 
             var glbLoaded = false;
 
@@ -217,6 +236,94 @@ namespace Room2Scan.Rooms
             foreach (var item in items.Values) DestroyFurnitureInstance(item);
             items.Clear();
             selectedInstanceId = null;
+        }
+
+        // ── P5: Move / collision / query ─────────────────────────────────────────────
+
+        /// <summary>Moves the currently selected furniture to the given world position.</summary>
+        public bool MoveSelected(float x, float y, float z)
+        {
+            if (selectedInstanceId == null || !items.TryGetValue(selectedInstanceId, out var item)) return false;
+            item.GameObject.transform.position = new Vector3(x, y, z);
+            return true;
+        }
+
+        /// <summary>Returns the root GameObject of the currently selected furniture, or null.</summary>
+        public GameObject GetSelectedGameObject()
+        {
+            if (selectedInstanceId == null || !items.TryGetValue(selectedInstanceId, out var item)) return null;
+            return item.GameObject;
+        }
+
+        /// <summary>
+        /// Finds the instanceId whose root GameObject equals <paramref name="go"/> or is an ancestor of it.
+        /// Used by FurnitureDragController after a Physics.Raycast hit.
+        /// </summary>
+        public string GetInstanceIdFromGameObject(GameObject go)
+        {
+            // Direct component check (cube furniture has FurnitureIdentifier on itself)
+            var id = go.GetComponent<FurnitureIdentifier>()
+                  ?? go.GetComponentInParent<FurnitureIdentifier>();
+            return id?.InstanceId;
+        }
+
+        /// <summary>
+        /// Returns true when <paramref name="instanceId"/> overlaps any other furniture
+        /// or breaches the room walls.
+        /// </summary>
+        public bool CheckCollision(string instanceId)
+        {
+            if (!items.TryGetValue(instanceId, out var target)) return false;
+            if (target.Locked) return false;
+
+            var tb = GetWorldBounds(target.GameObject);
+
+            // ── Wall/boundary check ───────────────────────────────────────────────
+            if (RoomBounds.size.sqrMagnitude > 0f)
+            {
+                if (tb.min.x < RoomBounds.min.x || tb.max.x > RoomBounds.max.x ||
+                    tb.min.z < RoomBounds.min.z || tb.max.z > RoomBounds.max.z)
+                    return true;
+            }
+
+            // ── Furniture-to-furniture AABB overlap ───────────────────────────────
+            foreach (var kvp in items)
+            {
+                if (kvp.Key == instanceId)   continue;
+                if (!kvp.Value.Visible)       continue;
+                if (kvp.Value.Locked)         continue;
+
+                var ob = GetWorldBounds(kvp.Value.GameObject);
+                if (tb.Intersects(ob)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Sets the drag-feedback color of <paramref name="instanceId"/>:
+        /// red = collision, green = placement OK.
+        /// Call with <paramref name="hasCollision"/> = false when drag ends
+        /// to restore the normal selected-yellow tint.
+        /// </summary>
+        public void SetCollisionColor(string instanceId, bool hasCollision)
+        {
+            if (!items.TryGetValue(instanceId, out var item)) return;
+            if (item.Material == null) return;
+            item.Material.color = hasCollision ? CollisionColor : PlacementOkColor;
+        }
+
+        /// <summary>Encapsulated AABB of all renderers on a furniture GameObject.</summary>
+        private static Bounds GetWorldBounds(GameObject go)
+        {
+            var renderers = go.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0)
+                return new Bounds(go.transform.position, go.transform.localScale);
+
+            var b = renderers[0].bounds;
+            for (var i = 1; i < renderers.Length; i++)
+                b.Encapsulate(renderers[i].bounds);
+            return b;
         }
 
         // ── Query helpers ────────────────────────────────────────────────────────────
