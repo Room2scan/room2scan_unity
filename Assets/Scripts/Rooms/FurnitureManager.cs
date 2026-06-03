@@ -191,7 +191,7 @@ namespace Room2Scan.Rooms
                 var uri = NormalizePath(glbPath);
                 try
                 {
-                    var gltf = new GltfImport(materialGenerator: new UrpFallbackMaterialGenerator());
+                    var gltf = new GltfImport();
                     if (await gltf.Load(uri))
                         glbLoaded = await gltf.InstantiateMainSceneAsync(parent.transform);
                     else
