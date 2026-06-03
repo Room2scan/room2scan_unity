@@ -23,6 +23,10 @@ namespace Room2Scan.Rooms
         // ── Runtime state ─────────────────────────────────────────────────────────
         private bool      isDragging     = false;
         private string    dragInstanceId = null;
+
+        /// <summary>True while a drag or scale gesture is active.
+        /// OrbitCameraController reads this to avoid single-finger orbit conflicts.</summary>
+        public bool IsBusy => isDragging || isScaling;
         private Transform dragTransform  = null;
         private float     dragYLevel     = 0f;
         private Vector3   dragOffset     = Vector3.zero;
