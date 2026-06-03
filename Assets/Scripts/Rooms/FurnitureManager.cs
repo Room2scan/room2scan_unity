@@ -359,8 +359,52 @@ namespace Room2Scan.Rooms
         public void SetCollisionColor(string instanceId, bool hasCollision)
         {
             if (!items.TryGetValue(instanceId, out var item)) return;
-            if (item.Material == null) return;
-            RuntimeMaterialFactory.SetColor(item.Material, hasCollision ? CollisionColor : PlacementOkColor);
+
+            if (item.Material != null)
+            {
+                // Simple cube furniture: single material reference
+                RuntimeMaterialFactory.SetColor(item.Material, hasCollision ? CollisionColor : PlacementOkColor);
+                return;
+            }
+
+            // GLB furniture: item.Material is null — tint all child renderer instance materials.
+            // Using renderer.materials (not sharedMaterials) to get per-instance copies so the
+            // original shared material is never modified.
+            var tint = hasCollision ? CollisionColor : PlacementOkColor;
+            foreach (var renderer in item.GameObject.GetComponentsInChildren<Renderer>(true))
+            {
+                var mats = renderer.materials; // creates instance copies
+                foreach (var mat in mats)
+                {
+                    if (mat == null) continue;
+                    // _BaseColor multiplier: white (1,1,1,1) = no tint, red/green = feedback
+                    if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", tint);
+                    else if (mat.HasProperty("_Color"))
+                        mat.SetColor("_Color", tint);
+                }
+                renderer.materials = mats;
+            }
+        }
+
+        /// <summary>Restores all GLB renderer instance materials to their original tint (white = no tint).</summary>
+        public void ClearCollisionColor(string instanceId)
+        {
+            if (!items.TryGetValue(instanceId, out var item)) return;
+            if (item.Material != null) return; // cube furniture handled by SelectFurniture re-apply
+
+            var white = Color.white;
+            foreach (var renderer in item.GameObject.GetComponentsInChildren<Renderer>(true))
+            {
+                var mats = renderer.materials;
+                foreach (var mat in mats)
+                {
+                    if (mat == null) continue;
+                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", white);
+                    else if (mat.HasProperty("_Color")) mat.SetColor("_Color", white);
+                }
+                renderer.materials = mats;
+            }
         }
 
         /// <summary>Encapsulated AABB of all renderers on a furniture GameObject.</summary>

@@ -234,7 +234,8 @@ namespace Room2Scan.Rooms
             }
 
             // Restore selected-yellow color (was green/red during drag)
-            fm.SelectFurniture(dragInstanceId);     // re-applies SelectedColor
+            fm.ClearCollisionColor(dragInstanceId); // restore GLB renderer tints first
+            fm.SelectFurniture(dragInstanceId);     // re-applies SelectedColor for cube furniture
 
             var t = fm.GetSelectedTransform();
             if (t.HasValue)
