@@ -153,8 +153,11 @@ namespace Room2Scan.Rooms
             var cam = GetComponent<Camera>();
             if (cam == null) return;
 
-            var floorY = go.transform.position.y;
-            var plane  = new Plane(Vector3.up, new Vector3(0f, floorY, 0f));
+            // Use Y=0 (floor level) as the drag plane regardless of furniture height.
+            // Dragging at furniture.y causes near-parallel ray/plane at steep camera
+            // angles, which collapses movement to a single axis.
+            var floorY = 0f;
+            var plane  = new Plane(Vector3.up, Vector3.zero);
             var ray    = cam.ScreenPointToRay(screenPos);
 
             if (!plane.Raycast(ray, out float dist)) return;
@@ -162,8 +165,11 @@ namespace Room2Scan.Rooms
             var hitWorld   = ray.GetPoint(dist);
             dragInstanceId = fm.SelectedInstanceId;
             dragTransform  = go.transform;
-            dragYLevel     = floorY;
-            dragOffset     = dragTransform.position - new Vector3(hitWorld.x, floorY, hitWorld.z);
+            dragYLevel     = go.transform.position.y;  // keep furniture at its own Y while moving XZ
+            dragOffset     = new Vector3(
+                dragTransform.position.x - hitWorld.x,
+                0f,
+                dragTransform.position.z - hitWorld.z);
             isDragging     = true;
             lastCollision  = false;
 
@@ -181,7 +187,7 @@ namespace Room2Scan.Rooms
             if (cam == null) return;
 
             var ray   = cam.ScreenPointToRay(screenPos);
-            var plane = new Plane(Vector3.up, new Vector3(0f, dragYLevel, 0f));
+            var plane = new Plane(Vector3.up, Vector3.zero); // always project onto Y=0 floor plane
             if (!plane.Raycast(ray, out float dist)) return;
 
             var hit    = ray.GetPoint(dist);
