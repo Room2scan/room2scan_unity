@@ -135,10 +135,9 @@ namespace Room2Scan.Bridge
                         }
                     };
 
-                    if (!string.IsNullOrWhiteSpace(deliveryManifestPath))
-                        roomManager.LoadDeliveryRoomShellFromBridgeEnvelope(envelopeJson, deliveryManifestPath, onRoomLoaded);
-                    else
-                        roomManager.LoadRoomFromBridgeEnvelope(envelopeJson, onRoomLoaded);
+                    // Always load the actual room GLB from mesh.uri so furniture
+                    // coordinates (from the delivery manifest) align with the real geometry.
+                    roomManager.LoadRoomFromBridgeEnvelope(envelopeJson, onRoomLoaded);
                     break;
 
                 case "CreateProceduralRoom":
