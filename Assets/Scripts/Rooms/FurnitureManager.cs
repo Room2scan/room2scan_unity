@@ -185,10 +185,16 @@ namespace Room2Scan.Rooms
             identifier.InstanceId = instanceId;
 
             var glbLoaded = false;
+            var extractedTexture = default(GltfBaseColorTextureExtractor.MaterialTextureData);
 
             if (!string.IsNullOrWhiteSpace(glbPath) && File.Exists(glbPath))
             {
                 var uri = NormalizePath(glbPath);
+                if (GltfBaseColorTextureExtractor.TryExtractFirstBaseColorTexture(uri, out extractedTexture))
+                {
+                    Debug.Log($"Room2Scan FurnitureManager: extracted embedded base-color texture for '{catalogId}'.");
+                }
+
                 try
                 {
                     var gltf = new GltfImport();
@@ -225,7 +231,7 @@ namespace Room2Scan.Rooms
                 EnsureSelectableColliders(parent);
             }
 
-            var materialResult = RuntimeMaterialFactory.NormalizeLoadedMaterials(parent, DefaultColor);
+            var materialResult = RuntimeMaterialFactory.NormalizeLoadedMaterials(parent, DefaultColor, extractedTexture);
             if (materialResult.ChangedMaterials > 0)
             {
                 Debug.Log($"Room2Scan FurnitureManager: normalized {materialResult.ChangedMaterials} materials for '{catalogId}' ({materialResult.ConvertedTexturedMaterials} textured, {materialResult.ReplacedUnsupportedMaterials} fallback).");

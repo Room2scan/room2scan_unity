@@ -70,6 +70,14 @@ namespace Room2Scan.Rooms
 
         public static MaterialNormalizationResult NormalizeLoadedMaterials(GameObject root, Color fallbackColor)
         {
+            return NormalizeLoadedMaterials(root, fallbackColor, default);
+        }
+
+        public static MaterialNormalizationResult NormalizeLoadedMaterials(
+            GameObject root,
+            Color fallbackColor,
+            GltfBaseColorTextureExtractor.MaterialTextureData extractedTexture)
+        {
             if (root == null) return new MaterialNormalizationResult(0, 0);
 
             var convertedTextured = 0;
@@ -91,6 +99,15 @@ namespace Room2Scan.Rooms
                     }
 
                     if (!ShouldReplace(material)) continue;
+
+                    if (extractedTexture.HasTexture
+                        && TryCreateTexturedMaterial(material, extractedTexture, out texturedMaterial))
+                    {
+                        materials[i] = texturedMaterial;
+                        convertedTextured++;
+                        changed = true;
+                        continue;
+                    }
 
                     materials[i] = CreateSolidColorMaterial($"{renderer.name}_Fallback", fallbackColor);
                     replacedUnsupported++;
@@ -186,6 +203,36 @@ namespace Room2Scan.Rooms
                             : Color.white;
 
             SetColor(converted, baseColor);
+            return true;
+        }
+
+        private static bool TryCreateTexturedMaterial(
+            Material source,
+            GltfBaseColorTextureExtractor.MaterialTextureData extractedTexture,
+            out Material converted)
+        {
+            converted = null;
+            if (!extractedTexture.HasTexture) return false;
+
+            var shader = ResolveTexturedShader();
+            if (shader == null) return false;
+
+            var materialName = source != null && !string.IsNullOrWhiteSpace(source.name)
+                ? $"{source.name}_Room2ScanExtractedTexture"
+                : "Room2Scan_ExtractedTexture";
+
+            converted = new Material(shader)
+            {
+                name = materialName,
+                renderQueue = source != null ? source.renderQueue : -1
+            };
+
+            if (converted.HasProperty(BaseMap))
+                converted.SetTexture(BaseMap, extractedTexture.Texture);
+            if (converted.HasProperty(MainTex))
+                converted.SetTexture(MainTex, extractedTexture.Texture);
+
+            SetColor(converted, extractedTexture.BaseColor);
             return true;
         }
 

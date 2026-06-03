@@ -170,6 +170,11 @@ namespace Room2Scan.Rooms
                 }
 
                 Debug.Log($"Room2Scan RoomManager: loading GLB room '{roomId}' from {loadableMeshUri}");
+                var extractedTexture = default(GltfBaseColorTextureExtractor.MaterialTextureData);
+                if (GltfBaseColorTextureExtractor.TryExtractFirstBaseColorTexture(loadableMeshUri, out extractedTexture))
+                {
+                    Debug.Log($"Room2Scan RoomManager: extracted embedded base-color texture for room '{roomId}'.");
+                }
 
                 var gltf = new GltfImport();
                 var loadSucceeded = await gltf.Load(loadableMeshUri);
@@ -205,7 +210,7 @@ namespace Room2Scan.Rooms
                     return;
                 }
 
-                var materialResult = RuntimeMaterialFactory.NormalizeLoadedMaterials(nextRoomRoot, RoomFallbackColor);
+                var materialResult = RuntimeMaterialFactory.NormalizeLoadedMaterials(nextRoomRoot, RoomFallbackColor, extractedTexture);
                 if (materialResult.ChangedMaterials > 0)
                 {
                     Debug.Log($"Room2Scan RoomManager: normalized {materialResult.ChangedMaterials} room materials ({materialResult.ConvertedTexturedMaterials} textured, {materialResult.ReplacedUnsupportedMaterials} fallback).");
