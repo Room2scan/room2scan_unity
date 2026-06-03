@@ -29,10 +29,21 @@ namespace Room2Scan.Bridge.Editor
 
             if (Directory.Exists(outputPath))
             {
-                Directory.Delete(outputPath, true);
+                // Unity keeps some DLLs (e.g. Unity.Options.dll) locked even in batchmode,
+                // so a hard delete fails. Try to delete; on failure log and proceed —
+                // BuildOptions.AcceptExternalModificationsToPlayer handles incremental builds.
+                try
+                {
+                    Directory.Delete(outputPath, true);
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"Room2Scan export: could not fully clear output dir (incremental build): {ex.Message}");
+                }
             }
 
-            Directory.CreateDirectory(outputPath);
+            if (!Directory.Exists(outputPath))
+                Directory.CreateDirectory(outputPath);
             EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             EditorUserBuildSettings.exportAsGoogleAndroidProject = true;
             PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.Android, "com.scan2room.unity");

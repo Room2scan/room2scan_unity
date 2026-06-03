@@ -225,13 +225,6 @@ namespace Room2Scan.Bridge
                         $"{{\"enabled\":{(snapEnabled ? "true" : "false")}}}"));
                     break;
 
-                // ── Undo / Redo ───────────────────────────────────────────────
-                case "UndoAction":
-                    // TODO P2: implement undo stack
-                    Debug.Log("Room2Scan Bridge: UndoAction (no-op in P1)");
-                    SendToRN(BuildEnvelope("UndoResult", "event", envelope.requestId,
-                        "{\"success\":false,\"reason\":\"undo_not_implemented\"}"));
-                    break;
 
                 case "RedoAction":
                     // TODO P2: implement undo stack
