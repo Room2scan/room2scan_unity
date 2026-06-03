@@ -225,10 +225,10 @@ namespace Room2Scan.Rooms
                 EnsureSelectableColliders(parent);
             }
 
-            var replacedMaterialCount = RuntimeMaterialFactory.ReplaceUnsupportedMaterials(parent, DefaultColor);
-            if (replacedMaterialCount > 0)
+            var materialResult = RuntimeMaterialFactory.NormalizeLoadedMaterials(parent, DefaultColor);
+            if (materialResult.ChangedMaterials > 0)
             {
-                Debug.Log($"Room2Scan FurnitureManager: replaced {replacedMaterialCount} unsupported materials for '{catalogId}'.");
+                Debug.Log($"Room2Scan FurnitureManager: normalized {materialResult.ChangedMaterials} materials for '{catalogId}' ({materialResult.ConvertedTexturedMaterials} textured, {materialResult.ReplacedUnsupportedMaterials} fallback).");
             }
 
             // GLB-loaded instances own their materials internally; no separate Material ref.

@@ -205,10 +205,10 @@ namespace Room2Scan.Rooms
                     return;
                 }
 
-                var replacedMaterialCount = RuntimeMaterialFactory.ReplaceUnsupportedMaterials(nextRoomRoot, RoomFallbackColor);
-                if (replacedMaterialCount > 0)
+                var materialResult = RuntimeMaterialFactory.NormalizeLoadedMaterials(nextRoomRoot, RoomFallbackColor);
+                if (materialResult.ChangedMaterials > 0)
                 {
-                    Debug.Log($"Room2Scan RoomManager: replaced {replacedMaterialCount} unsupported room materials.");
+                    Debug.Log($"Room2Scan RoomManager: normalized {materialResult.ChangedMaterials} room materials ({materialResult.ConvertedTexturedMaterials} textured, {materialResult.ReplacedUnsupportedMaterials} fallback).");
                 }
 
                 ClearLoadedRoom();
