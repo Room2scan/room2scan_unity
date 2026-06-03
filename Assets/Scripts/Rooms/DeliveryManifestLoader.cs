@@ -73,8 +73,13 @@ namespace Room2Scan.Rooms
                 }
 
                 var glbPath = ResolvePath(rootDir, item.movable_asset_local_pivot_glb);
-                var position = ToVector3(item.initial_transform?.position, Vector3.zero);
-                var rotationEuler = ToVector3(item.initial_transform?.rotation_euler_degrees, Vector3.zero);
+                var posRaw = ToVector3(item.initial_transform?.position, Vector3.zero);
+                // The delivery GLBs are in Unity Y-up (left-handed) space, but GLTFast treats
+                // GLB files as right-handed and negates X on import. Negate X here so furniture
+                // positions match the X-flipped room mesh after GLTFast loads it.
+                var position = new Vector3(-posRaw.x, posRaw.y, posRaw.z);
+                var rotEulerRaw = ToVector3(item.initial_transform?.rotation_euler_degrees, Vector3.zero);
+                var rotationEuler = new Vector3(rotEulerRaw.x, -rotEulerRaw.y, rotEulerRaw.z);
                 var rotation = Quaternion.Euler(rotationEuler);
                 var colliderCenter = ToVector3(item.box_collider?.center_local, Vector3.zero);
                 var colliderSize = ToVector3(item.box_collider?.size, Vector3.zero);

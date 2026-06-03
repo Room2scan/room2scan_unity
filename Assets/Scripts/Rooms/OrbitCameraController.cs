@@ -32,7 +32,7 @@ namespace Room2Scan.Rooms
 
         [Header("Pan")]
         public float panSensitivity      = 0.003f;
-        public float touchPanSensitivity = 0.004f;
+        public float touchPanSensitivity = 0.0012f;
 
         private Vector3 pivot;
         private float   distance;
