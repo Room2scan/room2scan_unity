@@ -171,7 +171,7 @@ namespace Room2Scan.Rooms
 
                 Debug.Log($"Room2Scan RoomManager: loading GLB room '{roomId}' from {loadableMeshUri}");
 
-                var gltf = new GltfImport();
+                var gltf = new GltfImport(materialGenerator: new UrpFallbackMaterialGenerator());
                 var loadSucceeded = await gltf.Load(loadableMeshUri);
                 if (generation != loadGeneration)
                 {
