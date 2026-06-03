@@ -90,14 +90,22 @@ namespace Room2Scan.Rooms
             if (material == null || material.shader == null) return true;
 
             var shaderName = material.shader.name;
+
+            // Always replace broken/error shaders
             if (shaderName.Contains("Error") || shaderName.Contains("FallbackError"))
                 return true;
 
+            // GLTFast-generated shaders (glTF/*, Shader Graphs/glTF-*) are valid — do NOT replace.
+            // Replacing them strips the PBR textures and produces flat solid colors.
+            if (shaderName.StartsWith("glTF/") || shaderName.StartsWith("Shader Graphs/glTF"))
+                return false;
+
+            // Built-in pipeline: "Standard" works fine — nothing to replace.
             if (GraphicsSettings.currentRenderPipeline == null)
                 return false;
 
-            return shaderName == "Standard"
-                   || shaderName.StartsWith("glTF/");
+            // URP: only replace the legacy "Standard" shader (not supported under URP).
+            return shaderName == "Standard";
         }
     }
 }
