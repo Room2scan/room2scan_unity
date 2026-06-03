@@ -170,6 +170,9 @@ namespace Room2Scan.Rooms
                 dragTransform.position.x - hitWorld.x,
                 0f,
                 dragTransform.position.z - hitWorld.z);
+            // Save undo snapshot before starting drag
+            FurnitureManager.Instance?.PushUndo(dragInstanceId);
+
             isDragging     = true;
             lastCollision  = false;
 

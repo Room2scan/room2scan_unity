@@ -23,6 +23,60 @@ namespace Room2Scan.Rooms
 
         private string selectedInstanceId;
 
+        // ── Undo stack ────────────────────────────────────────────────────────────
+        private readonly Stack<UndoEntry> undoStack = new Stack<UndoEntry>();
+        private const int MaxUndoSteps = 20;
+
+        private readonly struct UndoEntry
+        {
+            public readonly string    InstanceId;
+            public readonly Vector3   Position;
+            public readonly float     RotationYDeg;
+            public readonly float     Scale;
+            public readonly bool      WasDeleted;
+
+            public UndoEntry(string id, Vector3 pos, float rot, float scale, bool deleted = false)
+            {
+                InstanceId   = id;
+                Position     = pos;
+                RotationYDeg = rot;
+                Scale        = scale;
+                WasDeleted   = deleted;
+            }
+        }
+
+        /// <summary>Pushes the current transform of <paramref name="instanceId"/> onto the undo stack.</summary>
+        public void PushUndo(string instanceId)
+        {
+            if (!items.TryGetValue(instanceId, out var item)) return;
+            var t = item.GameObject.transform;
+            if (undoStack.Count >= MaxUndoSteps) return; // cap stack size
+            undoStack.Push(new UndoEntry(instanceId, t.position, t.eulerAngles.y, t.localScale.x));
+        }
+
+        /// <summary>Pushes a "deleted" marker so Undo can restore a deleted item.</summary>
+        public void PushUndoDelete(string instanceId, Vector3 pos, float rotY, float scale)
+        {
+            if (undoStack.Count >= MaxUndoSteps) return;
+            undoStack.Push(new UndoEntry(instanceId, pos, rotY, scale, deleted: true));
+        }
+
+        /// <summary>Undoes the last action. Returns true if something was undone.</summary>
+        public bool Undo()
+        {
+            if (undoStack.Count == 0) return false;
+            var entry = undoStack.Pop();
+            if (!items.TryGetValue(entry.InstanceId, out var item)) return false;
+
+            var t = item.GameObject.transform;
+            t.position   = entry.Position;
+            t.rotation   = Quaternion.Euler(0f, entry.RotationYDeg, 0f);
+            t.localScale = Vector3.one * entry.Scale;
+            return true;
+        }
+
+        public bool CanUndo => undoStack.Count > 0;
+
         /// <summary>
         /// Room bounding box set by UnityBridge when a room is built or loaded.
         /// Used by FurnitureDragController to clamp furniture inside the room.
@@ -367,7 +421,7 @@ namespace Room2Scan.Rooms
                 return;
             }
 
-            // GLB furniture: item.Material is null � tint all child renderer instance materials.
+            // GLB furniture: item.Material is null � tint all child renderer instance materials.
             // Using renderer.materials (not sharedMaterials) to get per-instance copies so the
             // original shared material is never modified.
             var tint = hasCollision ? CollisionColor : PlacementOkColor;

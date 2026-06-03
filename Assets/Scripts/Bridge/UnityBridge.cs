@@ -174,6 +174,10 @@ namespace Room2Scan.Bridge
                     HandleRotateSelected(envelopeJson, envelope.requestId);
                     break;
 
+                case "UndoAction":
+                    HandleUndo(envelope.requestId);
+                    break;
+
                 case "DeleteSelected":
                     HandleDeleteSelected(envelope.requestId);
                     break;
@@ -361,6 +365,7 @@ namespace Room2Scan.Bridge
             var envelope  = JsonUtility.FromJson<BridgeRotateEnvelope>(envelopeJson);
             var deltaDeg  = envelope?.payload?.deltaDeg ?? 45f;
             var fm        = FurnitureManager.GetOrCreateInstance();
+            fm.PushUndo(fm.SelectedInstanceId);
             var success   = fm.RotateSelected(deltaDeg);
 
             // Return updated transform so RN display stays in sync
@@ -378,10 +383,21 @@ namespace Room2Scan.Bridge
                 $",\"instanceId\":\"{EscapeJson(fm.SelectedInstanceId ?? string.Empty)}\"{transformJson}}}"));
         }
 
+        private void HandleUndo(string requestId)
+        {
+            var fm      = FurnitureManager.GetOrCreateInstance();
+            var success = fm.Undo();
+            // After undo, broadcast the updated object list so RN refreshes
+            if (success) SendObjectListUpdated();
+            SendToRN(BuildEnvelope("UndoResult", "event", requestId,
+                $"{{\"success\":{(success ? "true" : "false")},\"canUndo\":{(fm.CanUndo ? "true" : "false")}}}"));
+        }
+
         private void HandleDeleteSelected(string requestId)
         {
             var fm        = FurnitureManager.GetOrCreateInstance();
             var deletedId = fm.SelectedInstanceId; // capture before delete clears it
+            fm.PushUndo(deletedId);
             var success   = fm.DeleteSelected();
 
             SendToRN(BuildEnvelope("FurnitureDeleted", "event", requestId,
