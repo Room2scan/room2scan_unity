@@ -398,8 +398,8 @@ namespace Room2Scan.Rooms
             if (shader == null)
             {
                 // 폴백: URP/Lit (vertex color 없이 단색)
-                shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                Debug.LogWarning("Room2Scan PLY: Room2Scan/VertexColor shader not found, falling back to Lit (no vertex color).");
+                Debug.LogWarning("Room2Scan PLY: Room2Scan/VertexColor shader not found, falling back to solid color.");
+                return RuntimeMaterialFactory.CreateSolidColorMaterial("Room2Scan_PLY_Material", new Color(0.82f, 0.84f, 0.86f, 1f));
             }
 
             return new Material(shader) { name = "Room2Scan_PLY_Material" };

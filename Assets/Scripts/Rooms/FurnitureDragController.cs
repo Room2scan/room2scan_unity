@@ -1,5 +1,6 @@
 using UnityEngine;
 using Room2Scan.Bridge;
+using UnityEngine.InputSystem;
 
 namespace Room2Scan.Rooms
 {
@@ -26,13 +27,17 @@ namespace Room2Scan.Rooms
         private float     dragYLevel     = 0f;
         private Vector3   dragOffset     = Vector3.zero;
         private bool      lastCollision  = false;   // throttle: send event only on change
+        private bool      isScaling      = false;
+        private string    scaleInstanceId = null;
+        private float     scaleStartY    = 0f;
+        private float     scaleInitial   = 1f;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────────
 
         private void OnDestroy()
         {
             // Re-enable orbit if we're destroyed mid-drag
-            if (isDragging) RestoreOrbit();
+            if (isDragging || isScaling) RestoreOrbit();
         }
 
         // ── Update ─────────────────────────────────────────────────────────────────
@@ -43,24 +48,8 @@ namespace Room2Scan.Rooms
             if (bridge == null) return;
 
             // ── Input abstraction ─────────────────────────────────────────────────
-            bool    justPressed, isHeld, justReleased;
-            Vector2 screenPos;
-
-            if (Input.touchCount > 0)
-            {
-                var t       = Input.GetTouch(0);
-                justPressed  = t.phase == TouchPhase.Began;
-                isHeld       = t.phase == TouchPhase.Moved || t.phase == TouchPhase.Stationary;
-                justReleased = t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled;
-                screenPos    = t.position;
-            }
-            else
-            {
-                justPressed  = Input.GetMouseButtonDown(0);
-                isHeld       = Input.GetMouseButton(0);
-                justReleased = Input.GetMouseButtonUp(0);
-                screenPos    = Input.mousePosition;
-            }
+            if (!TryReadPointer(out var justPressed, out var isHeld, out var justReleased, out var screenPos))
+                return;
 
             var tool = bridge.ActiveTool;
 
@@ -72,6 +61,14 @@ namespace Room2Scan.Rooms
             }
 
             // ── Drag (move mode) ──────────────────────────────────────────────────
+            if (tool == "scale")
+            {
+                if      (justPressed  && !isScaling) TryBeginScale(screenPos);
+                else if (isHeld       &&  isScaling) ContinueScale(screenPos);
+                else if (justReleased &&  isScaling) EndScale();
+                return;
+            }
+
             if (tool != "move") return;
 
             if      (justPressed  && !isDragging) TryBeginDrag(screenPos);
@@ -80,6 +77,46 @@ namespace Room2Scan.Rooms
         }
 
         // ── Tap-to-select ──────────────────────────────────────────────────────────
+
+        private static bool TryReadPointer(
+            out bool justPressed,
+            out bool isHeld,
+            out bool justReleased,
+            out Vector2 screenPos)
+        {
+            var touch = Touchscreen.current;
+            if (touch != null)
+            {
+                var primary = touch.primaryTouch;
+                justPressed  = primary.press.wasPressedThisFrame;
+                isHeld       = primary.press.isPressed;
+                justReleased = primary.press.wasReleasedThisFrame;
+                if (justPressed || isHeld || justReleased)
+                {
+                    screenPos = primary.position.ReadValue();
+                    return true;
+                }
+            }
+
+            var mouse = Mouse.current;
+            if (mouse != null)
+            {
+                justPressed  = mouse.leftButton.wasPressedThisFrame;
+                isHeld       = mouse.leftButton.isPressed;
+                justReleased = mouse.leftButton.wasReleasedThisFrame;
+                if (justPressed || isHeld || justReleased)
+                {
+                    screenPos = mouse.position.ReadValue();
+                    return true;
+                }
+            }
+
+            justPressed = false;
+            isHeld = false;
+            justReleased = false;
+            screenPos = Vector2.zero;
+            return false;
+        }
 
         private void TrySelectAt(Vector2 screenPos, UnityBridge bridge)
         {
@@ -205,6 +242,61 @@ namespace Room2Scan.Rooms
 
             dragInstanceId = null;
             dragTransform  = null;
+        }
+
+        private void TryBeginScale(Vector2 screenPos)
+        {
+            var fm = FurnitureManager.Instance;
+            if (fm == null || fm.SelectedInstanceId == null) return;
+
+            var selected = fm.GetSelectedTransform();
+            if (!selected.HasValue) return;
+
+            isScaling = true;
+            scaleInstanceId = fm.SelectedInstanceId;
+            scaleStartY = screenPos.y;
+            scaleInitial = selected.Value.Scale;
+            lastCollision = false;
+            DisableOrbit();
+        }
+
+        private void ContinueScale(Vector2 screenPos)
+        {
+            var fm = FurnitureManager.Instance;
+            if (fm == null || scaleInstanceId == null) { EndScale(); return; }
+
+            var delta = (screenPos.y - scaleStartY) * 0.005f;
+            var nextScale = Mathf.Clamp(scaleInitial + delta, 0.2f, 4f);
+            if (!fm.ScaleSelected(nextScale)) return;
+
+            var hasCollision = fm.CheckCollision(scaleInstanceId);
+            fm.SetCollisionColor(scaleInstanceId, hasCollision);
+            if (hasCollision != lastCollision)
+            {
+                lastCollision = hasCollision;
+                UnityBridge.Instance?.SendCollisionStatusEvent(scaleInstanceId, hasCollision);
+            }
+        }
+
+        private void EndScale()
+        {
+            isScaling = false;
+            RestoreOrbit();
+
+            var fm = FurnitureManager.Instance;
+            if (fm != null && scaleInstanceId != null)
+            {
+                fm.SelectFurniture(scaleInstanceId);
+                var t = fm.GetSelectedTransform();
+                if (t.HasValue)
+                {
+                    UnityBridge.Instance?.SendFurnitureTransformedEvent(scaleInstanceId, t.Value);
+                    UnityBridge.Instance?.SendCollisionStatusEvent(scaleInstanceId, false);
+                }
+            }
+
+            scaleInstanceId = null;
+            lastCollision = false;
         }
 
         // ── Orbit helpers ──────────────────────────────────────────────────────────

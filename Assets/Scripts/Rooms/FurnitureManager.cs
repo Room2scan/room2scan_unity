@@ -19,6 +19,7 @@ namespace Room2Scan.Rooms
 
         private readonly Dictionary<string, FurnitureInstance> items =
             new Dictionary<string, FurnitureInstance>();
+        private static readonly List<Bounds> StaticCollisionBounds = new List<Bounds>();
 
         private string selectedInstanceId;
 
@@ -35,6 +36,18 @@ namespace Room2Scan.Rooms
 
         /// <summary>Update the room bounds used for wall-collision clamping.</summary>
         public static void SetRoomBounds(Bounds b) { RoomBounds = b; }
+
+        public static void SetStaticCollisionBounds(IEnumerable<Bounds> bounds)
+        {
+            StaticCollisionBounds.Clear();
+            if (bounds == null) return;
+            StaticCollisionBounds.AddRange(bounds);
+        }
+
+        public static void ClearStaticCollisionBounds()
+        {
+            StaticCollisionBounds.Clear();
+        }
 
         public static FurnitureManager GetOrCreateInstance()
         {
@@ -76,7 +89,7 @@ namespace Room2Scan.Rooms
             go.transform.position   = position;
             go.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
 
-            var mat = CreateMaterial(DefaultColor);
+            var mat = RuntimeMaterialFactory.CreateSolidColorMaterial("Room2Scan_Furniture", DefaultColor);
             go.GetComponent<Renderer>().material = mat;
 
             // Identifier component — used by FurnitureDragController for tap-to-select
@@ -98,7 +111,8 @@ namespace Room2Scan.Rooms
         /// </summary>
         public async Task<AddFurnitureResult> AddFurnitureFromGlbAsync(
             string instanceId, string catalogId, string glbPath,
-            Vector3 position, Quaternion rotation)
+            Vector3 position, Quaternion rotation,
+            Vector3? colliderCenter = null, Vector3? colliderSize = null)
         {
             if (string.IsNullOrWhiteSpace(instanceId))
                 return AddFurnitureResult.Failure("missing_instance_id", "instanceId is required.");
@@ -142,7 +156,25 @@ namespace Room2Scan.Rooms
                 var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 cube.transform.SetParent(parent.transform, false);
                 cube.transform.localScale = new Vector3(0.4f, 0.4f, 0.4f);
-                cube.GetComponent<Renderer>().material = CreateMaterial(DefaultColor);
+                cube.GetComponent<Renderer>().material =
+                    RuntimeMaterialFactory.CreateSolidColorMaterial("Room2Scan_FurnitureFallback", DefaultColor);
+            }
+
+            if (colliderSize.HasValue && colliderSize.Value.x > 0f && colliderSize.Value.y > 0f && colliderSize.Value.z > 0f)
+            {
+                var box = parent.GetComponent<BoxCollider>() ?? parent.AddComponent<BoxCollider>();
+                box.center = colliderCenter ?? Vector3.zero;
+                box.size = colliderSize.Value;
+            }
+            else
+            {
+                EnsureSelectableColliders(parent);
+            }
+
+            var replacedMaterialCount = RuntimeMaterialFactory.ReplaceUnsupportedMaterials(parent, DefaultColor);
+            if (replacedMaterialCount > 0)
+            {
+                Debug.Log($"Room2Scan FurnitureManager: replaced {replacedMaterialCount} unsupported materials for '{catalogId}'.");
             }
 
             // GLB-loaded instances own their materials internally; no separate Material ref.
@@ -157,14 +189,14 @@ namespace Room2Scan.Rooms
             if (selectedInstanceId != null && items.TryGetValue(selectedInstanceId, out var prev))
             {
                 if (prev.Material != null)
-                    prev.Material.color = prev.Visible ? DefaultColor : HiddenColor;
+                    RuntimeMaterialFactory.SetColor(prev.Material, prev.Visible ? DefaultColor : HiddenColor);
             }
 
             selectedInstanceId = null;
 
             if (!items.TryGetValue(instanceId, out var item)) return false;
 
-            if (item.Material != null) item.Material.color = SelectedColor;
+            if (item.Material != null) RuntimeMaterialFactory.SetColor(item.Material, SelectedColor);
             selectedInstanceId = instanceId;
             return true;
         }
@@ -174,26 +206,38 @@ namespace Room2Scan.Rooms
             if (selectedInstanceId == null || !items.TryGetValue(selectedInstanceId, out var original))
                 return DuplicateFurnitureResult.Failure("no_selection", "No furniture is selected.");
 
+            var originalId = selectedInstanceId;
             var newId  = $"dup_{SanitizeName(original.CatalogId)}_{Guid.NewGuid():N}";
             var newPos = original.GameObject.transform.position + new Vector3(0.6f, 0f, 0.6f);
-            var result = AddFurniture(newId, original.CatalogId, newPos);
-            if (!result.Success)
-                return DuplicateFurnitureResult.Failure(result.ErrorCode, result.ErrorMessage);
+            var clone = Instantiate(original.GameObject);
+            clone.name = $"Furniture_{SanitizeName(original.CatalogId)}_{newId}";
+            clone.transform.position = newPos;
+            clone.transform.rotation = original.GameObject.transform.rotation;
+            clone.transform.localScale = original.GameObject.transform.localScale;
+            foreach (var id in clone.GetComponentsInChildren<FurnitureIdentifier>(true))
+                id.InstanceId = newId;
+            if (clone.GetComponent<FurnitureIdentifier>() == null)
+                clone.AddComponent<FurnitureIdentifier>().InstanceId = newId;
+            if (Application.isPlaying) DontDestroyOnLoad(clone);
+            else clone.hideFlags = HideFlags.DontSave;
+            items[newId] = new FurnitureInstance(newId, original.CatalogId, clone, null);
+            selectedInstanceId = newId;
 
-            // copy rotation & scale from original
-            if (items.TryGetValue(newId, out var newItem))
-            {
-                newItem.GameObject.transform.rotation   = original.GameObject.transform.rotation;
-                newItem.GameObject.transform.localScale = original.GameObject.transform.localScale;
-            }
-
-            return DuplicateFurnitureResult.Ok(newId, selectedInstanceId, newPos);
+            return DuplicateFurnitureResult.Ok(newId, originalId, newPos);
         }
 
         public bool RotateSelected(float deltaDeg)
         {
             if (selectedInstanceId == null || !items.TryGetValue(selectedInstanceId, out var item)) return false;
             item.GameObject.transform.Rotate(Vector3.up, deltaDeg, Space.World);
+            return true;
+        }
+
+        public bool ScaleSelected(float scale)
+        {
+            if (selectedInstanceId == null || !items.TryGetValue(selectedInstanceId, out var item)) return false;
+            var clamped = Mathf.Clamp(scale, 0.2f, 4f);
+            item.GameObject.transform.localScale = Vector3.one * clamped;
             return true;
         }
 
@@ -213,13 +257,13 @@ namespace Room2Scan.Rooms
             if (!items.TryGetValue(instanceId, out var item)) return false;
             item.Visible = visible;
 
-            var r = item.GameObject.GetComponentInChildren<Renderer>(true);
-            if (r != null) r.enabled = visible;
+            foreach (var renderer in item.GameObject.GetComponentsInChildren<Renderer>(true))
+                renderer.enabled = visible;
 
             if (item.Material != null)
-                item.Material.color = instanceId == selectedInstanceId
+                RuntimeMaterialFactory.SetColor(item.Material, instanceId == selectedInstanceId
                     ? SelectedColor
-                    : (visible ? DefaultColor : HiddenColor);
+                    : (visible ? DefaultColor : HiddenColor));
 
             return true;
         }
@@ -236,6 +280,7 @@ namespace Room2Scan.Rooms
             foreach (var item in items.Values) DestroyFurnitureInstance(item);
             items.Clear();
             selectedInstanceId = null;
+            ClearStaticCollisionBounds();
         }
 
         // ── P5: Move / collision / query ─────────────────────────────────────────────
@@ -286,6 +331,11 @@ namespace Room2Scan.Rooms
                     return true;
             }
 
+            foreach (var wallBounds in StaticCollisionBounds)
+            {
+                if (tb.Intersects(wallBounds)) return true;
+            }
+
             // ── Furniture-to-furniture AABB overlap ───────────────────────────────
             foreach (var kvp in items)
             {
@@ -310,12 +360,21 @@ namespace Room2Scan.Rooms
         {
             if (!items.TryGetValue(instanceId, out var item)) return;
             if (item.Material == null) return;
-            item.Material.color = hasCollision ? CollisionColor : PlacementOkColor;
+            RuntimeMaterialFactory.SetColor(item.Material, hasCollision ? CollisionColor : PlacementOkColor);
         }
 
         /// <summary>Encapsulated AABB of all renderers on a furniture GameObject.</summary>
         private static Bounds GetWorldBounds(GameObject go)
         {
+            var colliders = go.GetComponentsInChildren<Collider>(true);
+            if (colliders.Length > 0)
+            {
+                var cb = colliders[0].bounds;
+                for (var i = 1; i < colliders.Length; i++)
+                    cb.Encapsulate(colliders[i].bounds);
+                return cb;
+            }
+
             var renderers = go.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length == 0)
                 return new Bounds(go.transform.position, go.transform.localScale);
@@ -353,12 +412,6 @@ namespace Room2Scan.Rooms
 
         // ── Helpers ──────────────────────────────────────────────────────────────────
 
-        private static Material CreateMaterial(Color color)
-        {
-            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            return new Material(shader) { color = color };
-        }
-
         private static void DestroyFurnitureInstance(FurnitureInstance item)
         {
             if (Application.isPlaying)
@@ -370,6 +423,18 @@ namespace Room2Scan.Rooms
             {
                 if (item.Material != null) DestroyImmediate(item.Material);
                 DestroyImmediate(item.GameObject);
+            }
+        }
+
+        private static void EnsureSelectableColliders(GameObject root)
+        {
+            if (root.GetComponentInChildren<Collider>(true) != null) return;
+
+            foreach (var meshFilter in root.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (meshFilter.sharedMesh == null) continue;
+                var collider = meshFilter.gameObject.AddComponent<MeshCollider>();
+                collider.sharedMesh = meshFilter.sharedMesh;
             }
         }
 

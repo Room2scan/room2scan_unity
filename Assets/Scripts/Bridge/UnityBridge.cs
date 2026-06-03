@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -17,6 +18,8 @@ namespace Room2Scan.Bridge
         private string currentRoomId  = DefaultRoomId;
         private string activeTool     = "select";   // mirrors RN toolbar state
         private bool   snapEnabled    = false;
+        private bool   loadRoomInProgress;
+        private string loadingRoomId;
 
         public static UnityBridge Instance => instance;
 
@@ -47,6 +50,13 @@ namespace Room2Scan.Bridge
             instance = this;
             gameObject.name = "UnityBridge";
             if (Application.isPlaying) DontDestroyOnLoad(gameObject);
+        }
+
+        private IEnumerator Start()
+        {
+            yield return null;
+            yield return null;
+            SendToRN(BuildEnvelope("BridgeReady", "event", null, "{\"ready\":true}"));
         }
 
         // ── Entry point from RN ───────────────────────────────────────────────────────
@@ -86,22 +96,49 @@ namespace Room2Scan.Bridge
             {
                 // ── Room ──────────────────────────────────────────────────────
                 case "LoadRoom":
-                    var sceneJsonPath  = ExtractString(envelopeJson, "sceneInstancePath", null);
-                    var objectsBaseDir = ExtractString(envelopeJson, "objectsBasePath",   null);
-                    RoomManager.GetOrCreateInstance().LoadRoomFromBridgeEnvelope(
-                        envelopeJson,
-                        result =>
+                    var sceneJsonPath        = ExtractString(envelopeJson, "sceneInstancePath", null);
+                    var objectsBaseDir       = ExtractString(envelopeJson, "objectsBasePath",   null);
+                    var deliveryManifestPath = ExtractString(envelopeJson, "deliveryManifestPath", null);
+                    var requestedRoomId      = ExtractString(envelopeJson, "roomId", DefaultRoomId);
+
+                    if (loadRoomInProgress && string.Equals(loadingRoomId, requestedRoomId, StringComparison.Ordinal))
+                    {
+                        Debug.Log($"Room2Scan UnityBridge: ignoring duplicate LoadRoom for '{requestedRoomId}' while it is still loading.");
+                        break;
+                    }
+
+                    loadRoomInProgress = true;
+                    loadingRoomId = requestedRoomId;
+                    var roomManager = RoomManager.GetOrCreateInstance();
+                    Action<RoomLoadResult> onRoomLoaded = result =>
+                    {
+                        try
                         {
                             if (result.SuccessFlag)
                             {
                                 currentRoomId = result.RoomId;
+                                FurnitureManager.GetOrCreateInstance().ClearAll();
+                                AttachOrbitCamera(result.Bounds);
                                 FurnitureManager.SetRoomBounds(result.Bounds);
                                 EnsureFurnitureDragController();
-                                if (!string.IsNullOrWhiteSpace(sceneJsonPath))
+                                if (!string.IsNullOrWhiteSpace(deliveryManifestPath))
+                                    LoadDeliveryManifestAndNotify(deliveryManifestPath);
+                                else if (!string.IsNullOrWhiteSpace(sceneJsonPath))
                                     LoadSceneInstanceAndNotify(sceneJsonPath, objectsBaseDir);
                             }
                             SendRoomLoaded(envelope.requestId, result);
-                        });
+                        }
+                        finally
+                        {
+                            loadRoomInProgress = false;
+                            loadingRoomId = null;
+                        }
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(deliveryManifestPath))
+                        roomManager.LoadDeliveryRoomShellFromBridgeEnvelope(envelopeJson, deliveryManifestPath, onRoomLoaded);
+                    else
+                        roomManager.LoadRoomFromBridgeEnvelope(envelopeJson, onRoomLoaded);
                     break;
 
                 case "CreateProceduralRoom":
@@ -226,6 +263,23 @@ namespace Room2Scan.Bridge
             SendObjectListUpdated();
         }
 
+        private static async void LoadDeliveryManifestAndNotify(string manifestPath)
+        {
+            Debug.Log($"Room2Scan Bridge: loading delivery manifest from '{manifestPath}'");
+            var result = await DeliveryManifestLoader.LoadAsync(manifestPath);
+            if (!result.Success)
+            {
+                Debug.LogWarning($"Room2Scan Bridge: delivery manifest load failed: {result.ErrorMessage}");
+                SendToRN(BuildEnvelope("EditorError", "event", null,
+                    "{\"failedCommand\":\"LoadRoom\"}",
+                    $"\"error\":{{\"code\":\"delivery_manifest_load_failed\",\"message\":\"{EscapeJson(result.ErrorMessage)}\"}}"));
+                return;
+            }
+
+            Debug.Log($"Room2Scan Bridge: delivery manifest placed {result.FurnitureCount} objects and {result.StaticColliderCount} static colliders.");
+            SendObjectListUpdated();
+        }
+
         // ── Command handlers ──────────────────────────────────────────────────────────
 
         private void HandleAddFurniture(string envelopeJson, string requestId)
@@ -316,7 +370,8 @@ namespace Room2Scan.Bridge
                 ? $",\"position\":{{\"x\":{FormatFloat(transform.Value.Position.x)}" +
                   $",\"y\":{FormatFloat(transform.Value.Position.y)}" +
                   $",\"z\":{FormatFloat(transform.Value.Position.z)}}}," +
-                  $"\"rotationYDeg\":{FormatFloat(transform.Value.RotationYDeg)}"
+                  $"\"rotationYDeg\":{FormatFloat(transform.Value.RotationYDeg)}," +
+                  $"\"scale\":{FormatFloat(transform.Value.Scale)}"
                 : string.Empty;
 
             SendToRN(BuildEnvelope("FurnitureTransformed", "event", requestId,
@@ -439,6 +494,7 @@ namespace Room2Scan.Bridge
             }
 
             currentRoomId = spec.RoomId;
+            RoomManager.GetOrCreateInstance().AdoptGeneratedRoom(spec.RoomId, result.RoomRoot);
 
             // Attach orbit camera, set room bounds, attach drag controller
             AttachOrbitCamera(result.Bounds);
@@ -486,13 +542,17 @@ namespace Room2Scan.Bridge
             var success = fm.MoveSelected(x, y, z);
             var t       = fm.GetSelectedTransform();
             var pos     = t.HasValue ? t.Value.Position : new Vector3(x, y, z);
+            var ry      = t.HasValue ? t.Value.RotationYDeg : 0f;
+            var scale   = t.HasValue ? t.Value.Scale : 1f;
 
             SendToRN(BuildEnvelope("FurnitureTransformed", "event", requestId,
                 "{\"success\":" + (success ? "true" : "false") +
                 ",\"instanceId\":\"" + EscapeJson(fm.SelectedInstanceId ?? string.Empty) + "\"" +
                 ",\"position\":{\"x\":" + FormatFloat(pos.x) +
                 ",\"y\":" + FormatFloat(pos.y) +
-                ",\"z\":" + FormatFloat(pos.z) + "}}"));
+                ",\"z\":" + FormatFloat(pos.z) + "}" +
+                ",\"rotationYDeg\":" + FormatFloat(ry) +
+                ",\"scale\":" + FormatFloat(scale) + "}"));
         }
 
         /// <summary>
@@ -533,7 +593,8 @@ namespace Room2Scan.Bridge
                 ",\"position\":{\"x\":" + FormatFloat(t.Position.x) +
                 ",\"y\":" + FormatFloat(t.Position.y) +
                 ",\"z\":" + FormatFloat(t.Position.z) + "}" +
-                ",\"rotationYDeg\":" + FormatFloat(t.RotationYDeg) + "}"));
+                ",\"rotationYDeg\":" + FormatFloat(t.RotationYDeg) +
+                ",\"scale\":" + FormatFloat(t.Scale) + "}"));
         }
 
         /// <summary>Broadcasts CollisionStatus to RN (throttled — only on state change).</summary>

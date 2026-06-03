@@ -355,15 +355,7 @@ namespace Room2Scan.Rooms
                 default:                  c = new Color(0.92f, 0.90f, 0.88f); break; // light beige
             }
 
-            // Use URP Lit if available, otherwise fall back to Standard
-            var shader = Shader.Find("Universal Render Pipeline/Lit")
-                      ?? Shader.Find("Standard");
-            if (shader != null)
-            {
-                var mat = new Material(shader);
-                mat.color = c;
-                mr.sharedMaterial = mat;
-            }
+            mr.sharedMaterial = RuntimeMaterialFactory.CreateSolidColorMaterial($"Room2Scan_{surface}", c);
         }
 
         // ── JSON parsing helpers (no JsonUtility needed) ──────────────────────────

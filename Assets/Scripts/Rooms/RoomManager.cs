@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -12,6 +13,9 @@ namespace Room2Scan.Rooms
         private const string RoomSchemaVersion = "room-json/v1";
         private const string GlbFormat = "glb";
         private const string PlyFormat = "ply";
+        private static readonly Color RoomFallbackColor = new Color(0.82f, 0.84f, 0.86f, 1f);
+        private static readonly Color DeliveryShellFloorColor = new Color(0.78f, 0.84f, 0.86f, 1f);
+        private static readonly Color DeliveryShellWallColor = new Color(0.94f, 0.95f, 0.92f, 1f);
 
         private static RoomManager instance;
 
@@ -74,11 +78,71 @@ namespace Room2Scan.Rooms
             _ = LoadRoomFromBridgeEnvelopeAsync(envelopeJson, onCompleted);
         }
 
+        public void LoadDeliveryRoomShellFromBridgeEnvelope(string envelopeJson, string manifestPath, Action<RoomLoadResult> onCompleted)
+        {
+            if (!TryParseRoom(envelopeJson, out var room, out var errorCode, out var errorMessage))
+            {
+                Complete(onCompleted, RoomLoadResult.Failure(null, null, errorCode, errorMessage));
+                return;
+            }
+
+            var roomId = room.roomId;
+            var originalMeshUri = room.mesh?.uri;
+
+            try
+            {
+                DeliveryManifestLoader.TryReadStaticWallBounds(manifestPath, out var wallBounds, out var wallError);
+                if (!string.IsNullOrWhiteSpace(wallError))
+                {
+                    Debug.LogWarning($"Room2Scan RoomManager: delivery shell using payload bounds only: {wallError}");
+                }
+
+                var bounds = room.bounds != null && room.bounds.IsValid
+                    ? room.bounds.ToBounds()
+                    : ResolveBoundsFromWallBoxes(wallBounds);
+
+                var nextRoomRoot = BuildDeliveryRoomShell(roomId, bounds, wallBounds);
+                PrepareRoomRoot(nextRoomRoot);
+                ClearLoadedRoom();
+
+                roomRoot = nextRoomRoot;
+                currentImport = null;
+                currentRoomUsesGeneratedPlyAssets = true;
+                CurrentRoomId = roomId;
+
+                FrameCamera(bounds);
+
+                var colliderCount = wallBounds?.Count ?? 0;
+                var result = RoomLoadResult.Success(roomId, originalMeshUri, "delivery_manifest_shell", colliderCount, bounds);
+                CurrentRoomResult = result;
+
+                Debug.Log($"Room2Scan RoomManager: loaded delivery room shell '{roomId}' with {colliderCount} static wall boxes.");
+                Complete(onCompleted, result);
+            }
+            catch (Exception exception)
+            {
+                Complete(onCompleted, RoomLoadResult.Failure(roomId, originalMeshUri, "delivery_shell_load_exception", exception.Message));
+            }
+        }
+
         public void ClearRoom()
         {
             loadGeneration++;
             ClearLoadedRoom();
             CurrentRoomId = null;
+            CurrentRoomResult = null;
+        }
+
+        public void AdoptGeneratedRoom(string roomId, GameObject nextRoomRoot)
+        {
+            loadGeneration++;
+            ClearLoadedRoom();
+
+            PrepareRoomRoot(nextRoomRoot);
+            roomRoot = nextRoomRoot;
+            currentImport = null;
+            currentRoomUsesGeneratedPlyAssets = true;
+            CurrentRoomId = roomId;
             CurrentRoomResult = null;
         }
 
@@ -139,6 +203,12 @@ namespace Room2Scan.Rooms
                     gltf.Dispose();
                     Complete(onCompleted, RoomLoadResult.Failure(roomId, originalMeshUri, "glb_instantiate_failed", $"Could not instantiate GLB scene: {originalMeshUri}"));
                     return;
+                }
+
+                var replacedMaterialCount = RuntimeMaterialFactory.ReplaceUnsupportedMaterials(nextRoomRoot, RoomFallbackColor);
+                if (replacedMaterialCount > 0)
+                {
+                    Debug.Log($"Room2Scan RoomManager: replaced {replacedMaterialCount} unsupported room materials.");
                 }
 
                 ClearLoadedRoom();
@@ -401,6 +471,118 @@ namespace Room2Scan.Rooms
             return colliderCount;
         }
 
+        private static GameObject BuildDeliveryRoomShell(string roomId, Bounds bounds, IReadOnlyList<Bounds> wallBounds)
+        {
+            var root = new GameObject($"RoomRoot_{SanitizeName(roomId)}_DeliveryShell");
+
+            var floorThickness = 0.025f;
+            var floorCenter = new Vector3(bounds.center.x, bounds.min.y - floorThickness * 0.5f, bounds.center.z);
+            var floorSize = new Vector3(Mathf.Max(bounds.size.x, 0.1f), floorThickness, Mathf.Max(bounds.size.z, 0.1f));
+            AddBoxVisual(root.transform, "Floor", floorCenter, floorSize, DeliveryShellFloorColor);
+
+            if (wallBounds != null && wallBounds.Count > 0)
+            {
+                for (var i = 0; i < wallBounds.Count; i++)
+                {
+                    var wall = wallBounds[i];
+                    if (wall.size.x <= 0f || wall.size.y <= 0f || wall.size.z <= 0f) continue;
+                    AddBoxVisual(root.transform, $"Wall_{i + 1}", wall.center, wall.size, DeliveryShellWallColor);
+                }
+            }
+            else
+            {
+                AddBoundaryWallVisuals(root.transform, bounds);
+            }
+
+            return root;
+        }
+
+        private static void AddBoundaryWallVisuals(Transform parent, Bounds bounds)
+        {
+            var thickness = 0.05f;
+            var height = Mathf.Max(bounds.size.y, 1f);
+            var y = bounds.min.y + height * 0.5f;
+
+            AddBoxVisual(parent, "Wall_XMin",
+                new Vector3(bounds.min.x, y, bounds.center.z),
+                new Vector3(thickness, height, Mathf.Max(bounds.size.z, thickness)),
+                DeliveryShellWallColor);
+            AddBoxVisual(parent, "Wall_XMax",
+                new Vector3(bounds.max.x, y, bounds.center.z),
+                new Vector3(thickness, height, Mathf.Max(bounds.size.z, thickness)),
+                DeliveryShellWallColor);
+            AddBoxVisual(parent, "Wall_ZMin",
+                new Vector3(bounds.center.x, y, bounds.min.z),
+                new Vector3(Mathf.Max(bounds.size.x, thickness), height, thickness),
+                DeliveryShellWallColor);
+            AddBoxVisual(parent, "Wall_ZMax",
+                new Vector3(bounds.center.x, y, bounds.max.z),
+                new Vector3(Mathf.Max(bounds.size.x, thickness), height, thickness),
+                DeliveryShellWallColor);
+        }
+
+        private static void AddBoxVisual(Transform parent, string name, Vector3 center, Vector3 size, Color color)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = center;
+
+            var meshFilter = go.AddComponent<MeshFilter>();
+            meshFilter.sharedMesh = CreateBoxMesh(size);
+
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = RuntimeMaterialFactory.CreateSolidColorMaterial($"Room2Scan_{name}", color);
+        }
+
+        private static Mesh CreateBoxMesh(Vector3 size)
+        {
+            var half = size * 0.5f;
+            var vertices = new[]
+            {
+                new Vector3(-half.x, -half.y, -half.z),
+                new Vector3( half.x, -half.y, -half.z),
+                new Vector3( half.x, -half.y,  half.z),
+                new Vector3(-half.x, -half.y,  half.z),
+                new Vector3(-half.x,  half.y, -half.z),
+                new Vector3( half.x,  half.y, -half.z),
+                new Vector3( half.x,  half.y,  half.z),
+                new Vector3(-half.x,  half.y,  half.z),
+            };
+
+            var triangles = new[]
+            {
+                0, 2, 1, 0, 3, 2,
+                4, 5, 6, 4, 6, 7,
+                0, 1, 5, 0, 5, 4,
+                1, 2, 6, 1, 6, 5,
+                2, 3, 7, 2, 7, 6,
+                3, 0, 4, 3, 4, 7,
+            };
+
+            var mesh = new Mesh { name = "Room2Scan_Box" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static Bounds ResolveBoundsFromWallBoxes(IReadOnlyList<Bounds> wallBounds)
+        {
+            if (wallBounds == null || wallBounds.Count == 0)
+            {
+                return new Bounds(Vector3.zero, new Vector3(3f, 1f, 3f));
+            }
+
+            var bounds = wallBounds[0];
+            for (var i = 1; i < wallBounds.Count; i++)
+            {
+                bounds.Encapsulate(wallBounds[i]);
+            }
+
+            return bounds;
+        }
+
         private static long CountTriangles(Mesh mesh)
         {
             long triangleCount = 0;
@@ -414,21 +596,23 @@ namespace Room2Scan.Rooms
 
         private static Bounds ResolveBounds(RoomJson room, GameObject root)
         {
-            if (room?.bounds != null && room.bounds.IsValid)
-            {
-                return room.bounds.ToBounds();
-            }
-
             var renderers = root.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length == 0)
             {
-                return new Bounds(Vector3.zero, Vector3.one);
+                return room?.bounds != null && room.bounds.IsValid
+                    ? room.bounds.ToBounds()
+                    : new Bounds(Vector3.zero, Vector3.one);
             }
 
             var bounds = renderers[0].bounds;
             for (var i = 1; i < renderers.Length; i++)
             {
                 bounds.Encapsulate(renderers[i].bounds);
+            }
+
+            if (room?.bounds != null && room.bounds.IsValid)
+            {
+                bounds.Encapsulate(room.bounds.ToBounds());
             }
 
             return bounds;

@@ -3,6 +3,7 @@ using System.Linq;
 using Room2Scan.Rooms.Editor;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEngine;
 
 namespace Room2Scan.Bridge.Editor
 {
@@ -54,18 +55,39 @@ namespace Room2Scan.Bridge.Editor
         private static void EnsureBuildScenes()
         {
             var scenes = GetEnabledScenePaths();
-            if (scenes.Length > 0)
+            if (scenes.Length == 0)
             {
-                return;
+                if (!File.Exists(FallbackScenePath))
+                {
+                    var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+                    EditorSceneManager.SaveScene(scene, FallbackScenePath);
+                }
+
+                EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(FallbackScenePath, true) };
+                scenes = GetEnabledScenePaths();
             }
 
-            if (!File.Exists(FallbackScenePath))
-            {
-                var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-                EditorSceneManager.SaveScene(scene, FallbackScenePath);
-            }
+            EnsureUnityBridgeInBuildScenes(scenes);
+        }
 
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(FallbackScenePath, true) };
+        private static void EnsureUnityBridgeInBuildScenes(string[] scenePaths)
+        {
+            foreach (var scenePath in scenePaths)
+            {
+                var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+                var hasBridge = scene.GetRootGameObjects()
+                    .Any(root => root.GetComponentInChildren<UnityBridge>(true) != null);
+
+                if (hasBridge)
+                {
+                    continue;
+                }
+
+                var bridgeObject = new GameObject("UnityBridge");
+                bridgeObject.AddComponent<UnityBridge>();
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+            }
         }
 
         private static string[] GetEnabledScenePaths()
