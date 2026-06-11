@@ -289,15 +289,17 @@ namespace Room2Scan.Bridge
                 return;
             }
 
+            var fm     = FurnitureManager.GetOrCreateInstance();
             var position = p.position != null
                 ? new Vector3(p.position.x, p.position.y, p.position.z)
-                : Vector3.zero;
-
-            var fm     = FurnitureManager.GetOrCreateInstance();
+                : fm.GetSuggestedAddPosition();
             var result = fm.AddFurniture(p.instanceId, p.catalogId ?? "unknown", position);
 
             if (result.Success)
             {
+                if (p.selectAfterAdd)
+                    fm.SelectFurniture(result.InstanceId);
+
                 SendFurnitureAdded(requestId, result.InstanceId, result.Position,
                     p.catalogId ?? "unknown", false /* not a duplicate */);
                 SendObjectListUpdated();
@@ -848,6 +850,7 @@ namespace Room2Scan.Bridge
                 public string     instanceId;
                 public string     catalogId;
                 public Vector3Json position;
+                public bool       selectAfterAdd;
             }
         }
 

@@ -12,6 +12,8 @@ namespace Room2Scan.Rooms
         private static readonly Color DefaultColor     = new Color(0.4f, 0.6f, 1.0f, 1f);
         private static readonly Color SelectedColor   = new Color(1.0f, 0.8f, 0.2f, 1f);
         private static readonly Color HiddenColor     = new Color(0.4f, 0.6f, 1.0f, 0.25f);
+        private const float ManualFurnitureHalfExtent = 0.4f;
+        private const float ManualFurnitureSpawnOffset = 0.7f;
         private static readonly Color CollisionColor  = new Color(1.0f, 0.22f, 0.22f, 1f);  // red  — overlap / wall breach
         private static readonly Color PlacementOkColor= new Color(0.25f, 0.85f, 0.35f, 1f); // green — OK while dragging
 
@@ -131,12 +133,72 @@ namespace Room2Scan.Rooms
         /// Synchronous add — creates a fallback cube.
         /// Used for user-triggered AddFurniture from the catalog.
         /// </summary>
+        public Vector3 GetSuggestedAddPosition()
+        {
+            if (!string.IsNullOrWhiteSpace(selectedInstanceId) &&
+                items.TryGetValue(selectedInstanceId, out var selected))
+            {
+                var origin = selected.GameObject.transform.position;
+                var candidates = new[]
+                {
+                    origin + new Vector3( ManualFurnitureSpawnOffset, 0f,  ManualFurnitureSpawnOffset),
+                    origin + new Vector3(-ManualFurnitureSpawnOffset, 0f,  ManualFurnitureSpawnOffset),
+                    origin + new Vector3( ManualFurnitureSpawnOffset, 0f, -ManualFurnitureSpawnOffset),
+                    origin + new Vector3(-ManualFurnitureSpawnOffset, 0f, -ManualFurnitureSpawnOffset),
+                };
+
+                foreach (var candidate in candidates)
+                {
+                    if (FitsInsideRoom(candidate, ManualFurnitureHalfExtent))
+                        return candidate;
+                }
+
+                return ClampPositionInsideRoom(candidates[0], ManualFurnitureHalfExtent);
+            }
+
+            if (RoomBounds.size.sqrMagnitude > 0f)
+            {
+                return new Vector3(
+                    RoomBounds.center.x,
+                    Mathf.Max(0f, RoomBounds.min.y),
+                    RoomBounds.center.z);
+            }
+
+            return Vector3.zero;
+        }
+
+        public static Vector3 ClampPositionInsideRoom(Vector3 position, float halfExtent)
+        {
+            if (RoomBounds.size.sqrMagnitude <= 0f) return position;
+
+            position.x = ClampAxis(position.x, RoomBounds.min.x + halfExtent, RoomBounds.max.x - halfExtent);
+            position.y = Mathf.Max(RoomBounds.min.y, position.y);
+            position.z = ClampAxis(position.z, RoomBounds.min.z + halfExtent, RoomBounds.max.z - halfExtent);
+            return position;
+        }
+
+        private static bool FitsInsideRoom(Vector3 position, float halfExtent)
+        {
+            if (RoomBounds.size.sqrMagnitude <= 0f) return true;
+            return position.x >= RoomBounds.min.x + halfExtent &&
+                   position.x <= RoomBounds.max.x - halfExtent &&
+                   position.z >= RoomBounds.min.z + halfExtent &&
+                   position.z <= RoomBounds.max.z - halfExtent;
+        }
+
+        private static float ClampAxis(float value, float min, float max)
+        {
+            return min > max ? (min + max) * 0.5f : Mathf.Clamp(value, min, max);
+        }
+
         public AddFurnitureResult AddFurniture(string instanceId, string catalogId, Vector3 position)
         {
             if (string.IsNullOrWhiteSpace(instanceId))
                 return AddFurnitureResult.Failure("missing_instance_id", "instanceId is required.");
             if (items.ContainsKey(instanceId))
                 return AddFurnitureResult.Failure("duplicate_instance_id", $"Instance '{instanceId}' already exists.");
+
+            position = ClampPositionInsideRoom(position, ManualFurnitureHalfExtent);
 
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = $"Furniture_{SanitizeName(catalogId)}_{instanceId}";
